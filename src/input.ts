@@ -32,6 +32,15 @@ export type Theme = {
 	seed: number;
 };
 
+const THEME_KEYS = [
+	"background",
+	"ink",
+	"muted",
+	"accent",
+	"fontSize",
+	"seed",
+] as const;
+
 /** A normalized text, with the field it was read from. */
 export type Text = { text: string; field: string };
 export type ModelAffordance = {
@@ -133,10 +142,37 @@ export function readSketch(data: unknown): Model {
 
 /** Returns the theme to draw with: the default theme when `theme` is undefined. */
 export function readTheme(theme: unknown): Theme {
-	if (theme !== undefined) {
-		throw new FatMarkerError("theme", "not supported yet");
+	const read = { ...DEFAULT_THEME };
+	if (theme === undefined) return read;
+	if (!isObject(theme)) throw new FatMarkerError("theme", "expected an object");
+	for (const [key, value] of presentEntries(theme)) {
+		if (!THEME_KEYS.includes(key as (typeof THEME_KEYS)[number])) {
+			throw new FatMarkerError(
+				keyPath("theme", key),
+				`unknown key; a theme has only ${THEME_KEYS.map(show).join(", ")}`,
+			);
+		}
+		const field = keyPath("theme", key);
+		if (key === "background" && value === "transparent") {
+			read.background = value;
+		} else if (
+			key === "background" ||
+			key === "ink" ||
+			key === "muted" ||
+			key === "accent"
+		) {
+			read[key] = readColor(
+				value,
+				field,
+				key === "background" ? ' or "transparent"' : "",
+			);
+		} else if (key === "fontSize") {
+			read.fontSize = readNumber(value, field, 6, 96);
+		} else {
+			read.seed = readSeed(value, field);
+		}
 	}
-	return { ...DEFAULT_THEME };
+	return read;
 }
 
 function readVariants(variants: unknown): ModelVariant[] {
@@ -166,6 +202,7 @@ function readVariant(
 	}
 	let name: Text | undefined;
 	let contents: (ModelPlace | ModelRow)[] | undefined;
+	const placeNames = new Map<string, string>();
 	for (const [key, value] of presentEntries(variant)) {
 		if (key === "variant") {
 			name = readNormalized(value, `${field}.variant`);
@@ -179,7 +216,7 @@ function readVariant(
 			names.set(name.text, index);
 		} else if (key === "contains") {
 			contents = readContents(value, `${field}.contains`, (content, at) =>
-				readPlaceOrRow(content, at, 1),
+				readPlaceOrRow(content, at, 1, placeNames),
 			);
 		} else {
 			throw new FatMarkerError(
@@ -204,12 +241,13 @@ function readContents<T>(
 	contents: unknown,
 	field: string,
 	readContent: (content: unknown, field: string) => T,
+	emptyMessage = "must not be empty",
 ): T[] {
 	if (!Array.isArray(contents)) {
 		throw new FatMarkerError(field, "expected an array");
 	}
 	if (contents.length === 0) {
-		throw new FatMarkerError(field, "must not be empty");
+		throw new FatMarkerError(field, emptyMessage);
 	}
 	// Array.from visits holes too, as undefined, where map would skip them.
 	return Array.from(contents, (content, i) =>
@@ -222,10 +260,21 @@ function readPlaceOrRow(
 	content: unknown,
 	field: string,
 	depth: number,
+	placeNames: Map<string, string>,
 ): ModelPlace | ModelRow {
-	if (hasKey(content, "row"))
-		return readRow(content, field, depth, readPlaceOrRow);
-	return readPlace(content, field, depth);
+	const kind = contentKind(content, field);
+	if (kind === "affordance") {
+		throw new FatMarkerError(field, "an affordance must be inside a place");
+	}
+	if (kind === "row")
+		return readRow(
+			content as Record<string, unknown>,
+			field,
+			depth,
+			(child, at, childDepth) =>
+				readPlaceOrRow(child, at, childDepth, placeNames),
+		);
+	return readPlace(content, field, depth, placeNames);
 }
 
 /** Reads what a place, or a row inside a place, holds at `depth`: a place, an affordance or a row. */
@@ -233,15 +282,59 @@ function readPlaceContent(
 	content: unknown,
 	field: string,
 	depth: number,
+	placeNames: Map<string, string>,
 ): ModelContent {
-	if (hasKey(content, "row"))
-		return readRow(content, field, depth, readPlaceContent);
-	if (hasKey(content, "place")) return readPlace(content, field, depth);
+	const kind = contentKind(content, field);
+	if (kind === "row")
+		return readRow(
+			content as Record<string, unknown>,
+			field,
+			depth,
+			(child, at, childDepth) =>
+				readPlaceContent(child, at, childDepth, placeNames),
+		);
+	if (kind === "place") return readPlace(content, field, depth, placeNames);
 	return readAffordance(content, field);
 }
 
+type ContentKind = "place" | "affordance" | "row";
+
+/** Identifies one content key, preserving malformed and ambiguous content errors at the content path. */
+function contentKind(content: unknown, field: string): ContentKind {
+	if (!isObject(content)) {
+		throw new FatMarkerError(
+			field,
+			'expected a place, an affordance or a row (an object with a "place", "affordance" or "row" key)',
+		);
+	}
+	const kinds = presentEntries(content)
+		.map(([key]) => key)
+		.filter(
+			(key): key is ContentKind =>
+				key === "place" || key === "affordance" || key === "row",
+		);
+	if (kinds.length === 0) {
+		throw new FatMarkerError(
+			field,
+			'expected a place, an affordance or a row (an object with a "place", "affordance" or "row" key)',
+		);
+	}
+	if (kinds.length > 1) {
+		throw new FatMarkerError(
+			field,
+			`has both ${show(kinds[0])} and ${show(kinds[1])}`,
+		);
+	}
+	return kinds[0];
+}
+
 /** Reads a place at `depth`, whose Wobble key `giveWobbleKeys` sets once its variant's name is known. */
-function readPlace(place: unknown, field: string, depth: number): ModelPlace {
+function readPlace(
+	place: unknown,
+	field: string,
+	depth: number,
+	placeNames: Map<string, string>,
+): ModelPlace {
 	if (!isObject(place)) {
 		throw new FatMarkerError(
 			field,
@@ -254,9 +347,20 @@ function readPlace(place: unknown, field: string, depth: number): ModelPlace {
 	for (const [key, value] of presentEntries(place)) {
 		if (key === "place") {
 			name = readNormalized(value, `${field}.place`);
+			const first = placeNames.get(name.text);
+			if (first !== undefined) {
+				throw new FatMarkerError(
+					name.field,
+					`duplicate place ${show(name.text)} (same as ${escapeUnsafeToPrint(first)})`,
+				);
+			}
+			placeNames.set(name.text, name.field);
 		} else if (key === "contains") {
-			contents = readContents(value, `${field}.contains`, (content, at) =>
-				readPlaceContent(content, at, depth + 1),
+			contents = readContents(
+				value,
+				`${field}.contains`,
+				(content, at) => readPlaceContent(content, at, depth + 1, placeNames),
+				"must not be empty (omit it for an empty place)",
 			);
 		} else {
 			throw new FatMarkerError(
@@ -292,6 +396,9 @@ function readRow(
 			);
 		}
 	}
+	if (contents.length === 0) {
+		throw new FatMarkerError(`${field}.row`, "must not be empty");
+	}
 	return { kind: "row", contents };
 }
 
@@ -320,10 +427,17 @@ function readAffordance(affordance: unknown, field: string): ModelAffordance {
 	for (const [key, value] of presentEntries(affordance)) {
 		if (key === "affordance") {
 			text = readNormalized(value, `${field}.affordance`);
+		} else if (
+			key === "read" ||
+			key === "mark" ||
+			key === "scribble" ||
+			key === "to"
+		) {
+			throw new FatMarkerError(`${field}.${key}`, "not supported yet");
 		} else {
 			throw new FatMarkerError(
 				keyPath(field, key),
-				'unknown key; an affordance has only "affordance"',
+				'unknown key; an affordance has only "affordance", "read", "to", "mark" and "scribble"',
 			);
 		}
 	}
@@ -396,14 +510,58 @@ function readText(text: unknown, field: string, whenEmpty: string): string {
 	return normalized;
 }
 
+function readNumber(
+	value: unknown,
+	field: string,
+	min: number,
+	max: number,
+): number {
+	if (
+		typeof value !== "number" ||
+		!Number.isFinite(value) ||
+		value < min ||
+		value > max
+	) {
+		throw new FatMarkerError(
+			field,
+			`must be a number from ${min} to ${max}, got ${show(value)}`,
+		);
+	}
+	return value;
+}
+
+function readSeed(value: unknown, field: string): number {
+	const max = 2 ** 32 - 1;
+	if (
+		typeof value !== "number" ||
+		!Number.isInteger(value) ||
+		value < 0 ||
+		value > max
+	) {
+		throw new FatMarkerError(
+			field,
+			`must be an integer from 0 to ${max}, got ${show(value)}`,
+		);
+	}
+	return value;
+}
+
+function readColor(value: unknown, field: string, alternative = ""): string {
+	if (
+		typeof value !== "string" ||
+		!/^#(?:[\da-f]{3}|[\da-f]{6})$/i.test(value)
+	) {
+		throw new FatMarkerError(
+			field,
+			`expected a hex color like "#990f3d"${alternative}, got ${show(value)}`,
+		);
+	}
+	return value.toLowerCase();
+}
+
 /** The keys of `object` in document order, skipping those set to `undefined` as if absent. */
 function presentEntries(object: Record<string, unknown>): [string, unknown][] {
 	return Object.entries(object).filter(([, value]) => value !== undefined);
-}
-
-/** Whether `value` is a plain object with `key` present. */
-function hasKey(value: unknown, key: string): value is Record<string, unknown> {
-	return isObject(value) && value[key] !== undefined;
 }
 
 /** A plain object, as `JSON.parse` makes: no array, `Map`, `Date` or class instance. */

@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { describe, test } from "node:test";
 import { fileURLToPath } from "node:url";
-import { renderSvg, type Sketch } from "../src/index.ts";
+import { FatMarkerError, renderSvg, type Sketch } from "../src/index.ts";
 
 function fixture(name: string): Sketch {
 	const url = new URL(`fixtures/${name}.json`, import.meta.url);
@@ -237,5 +237,60 @@ describe("renderSvg", () => {
 		const numbers = renderSvg(fixture("minimal")).match(/-?\d+\.\d+/g) ?? [];
 		assert.ok(numbers.length > 0);
 		assert.ok(numbers.every((n) => /^-?\d+\.\d$/.test(n) && n !== "-0.0"));
+	});
+
+	test("renders a partial theme without mutating either argument", () => {
+		const input: Sketch = {
+			variants: [
+				{
+					variant: "A",
+					contains: [
+						{
+							place: "Outer",
+							contains: [
+								{
+									row: [
+										{
+											place: "Inner",
+											contains: [{ affordance: "Save" }],
+										},
+									],
+								},
+							],
+						},
+					],
+				},
+			],
+		};
+		const theme = { ink: "#A1B" } as const;
+		const originalInput = structuredClone(input);
+		const originalTheme = structuredClone(theme);
+		const svg = renderSvg(input, theme);
+		assert.deepEqual(input, originalInput);
+		assert.deepEqual(theme, originalTheme);
+		assert.ok(svg.includes("#a1b"));
+		assert.match(
+			desc(svg) ?? "",
+			/- place: Inner \(in Outer\)\n- affordance: Save \(in Inner\)/,
+		);
+		assert.match(renderSvg(input, { fontSize: 36 }), /stroke-width="7\.2"/);
+		assert.doesNotMatch(
+			renderSvg(input, { background: "transparent" }),
+			/<rect\b/,
+		);
+	});
+
+	test("propagates theme validation errors through renderSvg", () => {
+		assert.throws(
+			() =>
+				renderSvg(
+					{
+						variants: [{ variant: "A", contains: [{ place: "P" }] }],
+					},
+					{ fontSize: 5 },
+				),
+			(error) =>
+				error instanceof FatMarkerError && error.field === "theme.fontSize",
+		);
 	});
 });

@@ -4,7 +4,7 @@ import { createReadStream } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
 import { extname } from "node:path";
 import { getSystemErrorMessage, parseArgs } from "node:util";
-import { FatMarkerError, renderSvg, type Sketch } from "./index.ts";
+import { FatMarkerError, renderSvg, type Sketch, type Theme } from "./index.ts";
 import { escapeUnsafeToPrint } from "./input.ts";
 
 export type Io = {
@@ -20,6 +20,7 @@ variants, places and affordances. Reads stdin when given no input file, or "-".
 
 Options:
   -o, --output <file>  write to <file> instead of stdout, as SVG
+      --theme <file>   apply a partial theme read from a JSON file
   -h, --help           print this help
       --version        print the version
 
@@ -64,7 +65,12 @@ export async function run(args: string[], io: Io): Promise<number> {
 		const input = positionals[0] ?? "-";
 		const source = input === "-" ? "<stdin>" : input;
 		const data = parseJson(await readInput(input, io), source);
-		const image = draw(data, source);
+		const themeSource = values.theme;
+		const theme =
+			themeSource === undefined
+				? undefined
+				: parseJson(await readFileText(themeSource), themeSource);
+		const image = draw(data, source, theme, themeSource);
 		if (values.output === undefined) io.stdout.write(image);
 		else await writeOutput(values.output, image);
 		return 0;
@@ -77,6 +83,7 @@ export async function run(args: string[], io: Io): Promise<number> {
 
 const options = {
 	output: { type: "string", short: "o" },
+	theme: { type: "string" },
 	help: { type: "boolean", short: "h" },
 	version: { type: "boolean" },
 } as const;
@@ -175,13 +182,21 @@ function parseJson(json: string, source: string): unknown {
 }
 
 /** Draws `data`, read from `source`, and reports an error in it against `source`. */
-function draw(data: unknown, source: string): string {
+function draw(
+	data: unknown,
+	source: string,
+	theme?: unknown,
+	themeSource?: string,
+): string {
 	try {
 		// renderSvg validates its input at runtime: data read from JSON is safe to pass as is.
-		return renderSvg(data as Sketch);
+		return renderSvg(data as Sketch, theme as Partial<Theme> | undefined);
 	} catch (error) {
 		if (error instanceof FatMarkerError)
-			throw new Failure(`${source}: ${error.message}`, 1);
+			throw new Failure(
+				`${themeSource && /^(theme(?:\.|\[|$))/.test(error.field) ? themeSource : source}: ${error.message}`,
+				1,
+			);
 		throw error;
 	}
 }

@@ -23,7 +23,11 @@ export function toSvg(layout: Layout, theme: Theme): string {
 		`<svg xmlns="http://www.w3.org/2000/svg" viewBox="${x} ${y} ${width} ${height}" width="${width}" height="${height}" role="img">`,
 		`<title>${escapeXml(title?.lines.join(" ") ?? "Fat marker sketch")}</title>`,
 		`<desc>${escapeXml(describe(layout))}</desc>`,
-		`<rect x="${x}" y="${y}" width="${width}" height="${height}" fill="${theme.background}"/>`,
+		...(theme.background === "transparent"
+			? []
+			: [
+					`<rect x="${x}" y="${y}" width="${width}" height="${height}" fill="${theme.background}"/>`,
+				]),
 		...(title ? [text(title, theme.ink)] : []),
 		...(subtitle ? [text(subtitle, theme.muted)] : []),
 		...layout.variants.map(({ heading, items }) =>

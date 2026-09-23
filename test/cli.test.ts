@@ -143,8 +143,95 @@ describe("run", () => {
 		assert.deepEqual(await runCli([path]), {
 			code: 1,
 			stdout: "",
-			stderr: `fat-marker: ${path}: variants[0].contains[0].contains[0].label: unknown key; an affordance has only "affordance"\n`,
+			stderr: `fat-marker: ${path}: variants[0].contains[0].contains[0].label: unknown key; an affordance has only "affordance", "read", "to", "mark" and "scribble"\n`,
 		});
+	});
+
+	test("reports representative structural errors in named data files", async () => {
+		for (const [name, json, field] of [
+			[
+				"variant-key.json",
+				'{"variants":[{"variant":"A","contains":[{"place":"P"}],"name":"x"}]}',
+				"variants[0].name",
+			],
+			[
+				"variant-affordance.json",
+				'{"variants":[{"variant":"A","contains":[{"affordance":"Go"}]}]}',
+				"variants[0].contains[0]",
+			],
+			[
+				"empty-place-contents.json",
+				'{"variants":[{"variant":"A","contains":[{"place":"P","contains":[]}]}]}',
+				"variants[0].contains[0].contains",
+			],
+		] as const) {
+			const path = tempFile(name, json);
+			const { code, stderr } = await runCli([path]);
+			assert.equal(code, 1);
+			assert.ok(stderr.startsWith(`fat-marker: ${path}: ${field}:`), stderr);
+		}
+	});
+
+	test("escapes an unsafe key in a data field path before writing stderr", async () => {
+		const path = tempFile("unsafe-key.json", '{"\\u001bx":1,"variants":[]}');
+		const { code, stderr } = await runCliBytes([path]);
+		assert.equal(code, 1);
+		assert.ok(stderr.includes("\\u001b"), stderr.toString());
+		assert.equal(stderr.includes(Buffer.from([0x1b])), false);
+	});
+
+	test("uses a partial theme file and names it for theme validation errors", async () => {
+		const ink = tempFile("ink.json", '{"ink":"#A1B"}');
+		const rendered = await runCli([minimalPath, "--theme", ink]);
+		assert.equal(rendered.code, 0);
+		assert.ok(rendered.stdout.includes('fill="#a1b"'));
+		assert.ok(!rendered.stdout.includes('fill="#262a33"'));
+
+		for (const [name, json, field, reason] of [
+			["width-theme.json", '{"width":960}', "theme.width", "unknown key"],
+			["font-theme.json", '{"fontSize":5}', "theme.fontSize", "6 to 96"],
+		] as const) {
+			const path = tempFile(name, json);
+			const { code, stderr } = await runCli([minimalPath, "--theme", path]);
+			assert.equal(code, 1);
+			assert.ok(stderr.startsWith(`fat-marker: ${path}: ${field}:`), stderr);
+			assert.ok(stderr.includes(reason), stderr);
+		}
+
+		const transparent = tempFile(
+			"transparent-theme.json",
+			'{"background":"transparent"}',
+		);
+		const svg = await runCli([minimalPath, "--theme", transparent]);
+		assert.equal(svg.code, 0);
+		assert.ok(!svg.stdout.includes("#fff1e5"));
+
+		const broken = tempFile("broken-theme.json", "{");
+		const invalid = await runCli([minimalPath, "--theme", broken]);
+		assert.equal(invalid.code, 1);
+		assert.ok(
+			invalid.stderr.startsWith(`fat-marker: ${broken}: invalid JSON:`),
+			invalid.stderr,
+		);
+
+		const unreadable = join(dir, "missing-theme.json");
+		const missing = await runCli([minimalPath, "--theme", unreadable]);
+		assert.equal(missing.code, 2);
+		assert.ok(
+			missing.stderr.startsWith(`fat-marker: cannot read ${unreadable}:`),
+			missing.stderr,
+		);
+
+		const oversized = tempFile(
+			"oversized-theme.json",
+			" ".repeat(1024 * 1024 + 1),
+		);
+		const tooLarge = await runCli([minimalPath, "--theme", oversized]);
+		assert.equal(tooLarge.code, 1);
+		assert.equal(
+			tooLarge.stderr,
+			`fat-marker: ${oversized}: larger than the 1 MiB input limit\n`,
+		);
 	});
 
 	test("exits 1 on invalid data from stdin, naming <stdin>", async () => {
@@ -246,7 +333,12 @@ describe("run, on help, version and usage errors", () => {
 			const { code, stdout, stderr } = await runCli([flag]);
 			assert.deepEqual({ code, stderr }, { code: 0, stderr: "" });
 			assert.match(stdout, /^Usage: fat-marker \[input\.json\|-\]/);
-			for (const option of ["-o, --output", "-h, --help", "--version"]) {
+			for (const option of [
+				"-o, --output",
+				"--theme",
+				"-h, --help",
+				"--version",
+			]) {
 				assert.ok(stdout.includes(option), option);
 			}
 			assert.match(stdout, /\nExit codes:\n +0 .+\n +1 .+\n +2 .+\n$/);

@@ -246,7 +246,7 @@ describe("readSketch, on data outside this version", () => {
 		[
 			"an affordance at the top of a variant",
 			withVariant({ variant: "A", contains: [{ affordance: "Go" }] }),
-			"variants[0].contains[0].affordance",
+			"variants[0].contains[0]",
 		],
 		[
 			"an affordance in a row at the top of a variant",
@@ -254,7 +254,7 @@ describe("readSketch, on data outside this version", () => {
 				variant: "A",
 				contains: [{ row: [{ affordance: "Go" }] }],
 			}),
-			"variants[0].contains[0].row[0].affordance",
+			"variants[0].contains[0].row[0]",
 		],
 		[
 			"an unknown key on a row",
@@ -361,6 +361,187 @@ describe("readSketch, on the sketch and its variants", () => {
 					'variants[1].variant: duplicate variant "A · Plot list" (same as variants[0])',
 		);
 	});
+
+	test("checks present keys in document order and missing keys afterward", () => {
+		assert.throws(
+			() => readSketch(withVariant({ name: "A" })),
+			(error) =>
+				error instanceof FatMarkerError && error.field === "variants[0].name",
+		);
+		assert.throws(
+			() => readSketch(withVariant({ contains: [] })),
+			(error) =>
+				error instanceof FatMarkerError &&
+				error.field === "variants[0].contains",
+		);
+	});
+
+	test("reports a structural error in an earlier variant first", () => {
+		assert.throws(
+			() =>
+				readSketch({
+					variants: [
+						{ variant: "A", contains: [{ affordance: "Go" }] },
+						{ variant: "B", contains: [{ nope: true }] },
+					],
+				}),
+			(error) =>
+				error instanceof FatMarkerError &&
+				error.field === "variants[0].contains[0]",
+		);
+	});
+
+	test("rejects ambiguous content at its field and cites each content key", () => {
+		assert.throws(
+			() =>
+				readSketch(
+					withVariant({
+						variant: "A",
+						contains: [{ place: "P", affordance: "Go" }],
+					}),
+				),
+			(error) =>
+				error instanceof FatMarkerError &&
+				error.message ===
+					'variants[0].contains[0]: has both "place" and "affordance"',
+		);
+	});
+
+	test("reports representative root, variant, place, row and affordance rules", () => {
+		const cases: [unknown, string, string][] = [
+			[null, "(root)", "expected an object"],
+			[{ variants: "A" }, "variants", "expected an array"],
+			[{ variants: [null] }, "variants[0]", "expected an object"],
+			[
+				{ variants: [{ contains: [{ place: "P" }] }] },
+				"variants[0].variant",
+				"required",
+			],
+			[{ variants: [{ variant: "A" }] }, "variants[0].contains", "required"],
+			[
+				withVariant({
+					variant: "A",
+					contains: [{ place: "P", colour: "red" }],
+				}),
+				"variants[0].contains[0].colour",
+				"unknown key",
+			],
+			[
+				withVariant({
+					variant: "A",
+					contains: [
+						{ place: "P", contains: [{ row: [{ place: "Q" }], other: true }] },
+					],
+				}),
+				"variants[0].contains[0].contains[0].other",
+				"unknown key",
+			],
+			[
+				withVariant({
+					variant: "A",
+					contains: [
+						{ place: "P", contains: [{ affordance: "Go", label: "next" }] },
+					],
+				}),
+				"variants[0].contains[0].contains[0].label",
+				'only "affordance", "read", "to", "mark" and "scribble"',
+			],
+			[
+				withVariant({
+					variant: "A",
+					contains: [{ place: "P", contains: [{ affordance: 1 }] }],
+				}),
+				"variants[0].contains[0].contains[0].affordance",
+				"expected a string",
+			],
+			[
+				withVariant({ variant: "A", contains: [{ row: "P" }] }),
+				"variants[0].contains[0].row",
+				"expected an array",
+			],
+		];
+		for (const [data, field, reason] of cases) {
+			assert.throws(
+				() => readSketch(data),
+				(error) =>
+					error instanceof FatMarkerError &&
+					error.field === field &&
+					error.message.includes(reason),
+				`${field}: ${reason}`,
+			);
+		}
+	});
+
+	test("escapes format characters in quoted duplicate names", () => {
+		assert.throws(
+			() =>
+				readSketch({
+					variants: [
+						{ variant: "A\u202e", contains: [{ place: "P" }] },
+						{ variant: "A\u202e", contains: [{ place: "Q" }] },
+					],
+				}),
+			(error) =>
+				error instanceof FatMarkerError && error.message.includes("\\u202e"),
+		);
+	});
+
+	test("rejects duplicate normalized place names within a variant and allows them across variants", () => {
+		assert.throws(
+			() =>
+				readSketch(
+					withVariant({
+						variant: "A",
+						contains: [
+							{
+								place: "Setup",
+								contains: [{ row: [{ place: "Other" }, { place: " Setup " }] }],
+							},
+						],
+					}),
+				),
+			(error) =>
+				error instanceof FatMarkerError &&
+				error.message ===
+					'variants[0].contains[0].contains[0].row[1].place: duplicate place "Setup" (same as variants[0].contains[0].place)',
+		);
+		assert.doesNotThrow(() =>
+			readSketch({
+				variants: [
+					{ variant: "A", contains: [{ place: "Setup" }] },
+					{ variant: "B", contains: [{ place: "Setup" }] },
+				],
+			}),
+		);
+	});
+
+	test("rejects empty place contents with an omission hint and empty rows", () => {
+		assert.throws(
+			() => readSketch(withPlace({ place: "P", contains: [] })),
+			(error) =>
+				error instanceof FatMarkerError &&
+				error.message ===
+					"variants[0].contains[0].contains: must not be empty (omit it for an empty place)",
+		);
+		assert.throws(
+			() => readSketch(withVariant({ variant: "A", contains: [{ row: [] }] })),
+			(error) =>
+				error instanceof FatMarkerError &&
+				error.message === "variants[0].contains[0].row: must not be empty",
+		);
+	});
+
+	test("rejects unsupported affordance keys on their own fields", () => {
+		for (const key of ["read", "mark", "scribble", "to"]) {
+			assert.throws(
+				() => readSketch(withAffordance({ affordance: "Go", [key]: true })),
+				(error) =>
+					error instanceof FatMarkerError &&
+					error.field.endsWith(`.${key}`) &&
+					error.message.endsWith(": not supported yet"),
+			);
+		}
+	});
 });
 
 describe("readTheme", () => {
@@ -373,5 +554,40 @@ describe("readTheme", () => {
 			fontSize: 18,
 			seed: 1,
 		});
+	});
+
+	test("shallow-merges, validates and normalizes a partial theme", () => {
+		assert.deepEqual(readTheme({ ink: "#A1B", seed: 0 }), {
+			background: "#fff1e5",
+			ink: "#a1b",
+			muted: "#6b6259",
+			accent: "#0f5499",
+			fontSize: 18,
+			seed: 0,
+		});
+		assert.equal(
+			readTheme({ background: "transparent" }).background,
+			"transparent",
+		);
+	});
+
+	test("rejects unknown and invalid theme values by theme field", () => {
+		for (const [theme, field, message] of [
+			[{ width: 960 }, "theme.width", "unknown key"],
+			[{ fontSize: 5 }, "theme.fontSize", "must be a number from 6 to 96"],
+			[{ fontSize: "18" }, "theme.fontSize", "must be a number from 6 to 96"],
+			[{ seed: -1 }, "theme.seed", "must be an integer"],
+			[{ background: "#12345" }, "theme.background", "expected a hex color"],
+			[{ ink: "transparent" }, "theme.ink", "expected a hex color"],
+			[null, "theme", "expected an object"],
+		] as [unknown, string, string][]) {
+			assert.throws(
+				() => readTheme(theme),
+				(error) =>
+					error instanceof FatMarkerError &&
+					error.field === field &&
+					error.message.includes(message),
+			);
+		}
 	});
 });
