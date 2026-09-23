@@ -1,3 +1,4 @@
+import { measure } from "./font.ts";
 import type {
 	ModelAffordance,
 	ModelArrow,
@@ -13,6 +14,7 @@ import type {
 	LaidArrow,
 	LaidPlace,
 	Point,
+	TextBlock,
 } from "./layout.ts";
 
 type Side = LaidArrow["side"];
@@ -50,6 +52,8 @@ const LOW = 0.45;
 const ENTRY_DEPTH = 0.8;
 /** The width of one lane of a place, right of its contents, down which the arrow of a stacked start runs. */
 const STACK_LANE = 1;
+/** How far right of the end of its text an arrow from an affordance without an outline starts. */
+const DEPARTURE_GAP = 0.4;
 
 /** How an arrow is routed, read from the tree: the side of its target it reaches, and the place whose lanes it takes. */
 type Route = { side: Side; stackedIn?: ModelPlace };
@@ -68,26 +72,25 @@ export function routeArrows(
 	items: (LaidPlace | LaidAffordance)[],
 	em: number,
 ): { arrows: LaidArrow[]; corridor: number } {
-	const boxes = new Map<ModelAffordance, Box>();
+	const affordances = new Map<ModelAffordance, LaidAffordance>();
 	const places = new Map<ModelPlace, LaidPlace>();
 	for (const item of items) {
 		if (item.kind === "place") places.set(item.place, item);
-		else boxes.set(item.affordance, item.box);
+		else affordances.set(item.affordance, item);
 	}
 	const routes = routesOf(variant);
 	const sides = routes.map(({ side }) => side);
 	const lanes = sides.filter((side) => side === "right").length;
 	const corridor = lanes === 0 ? 0 : (CORRIDOR_GAP + lanes * LANE_WIDTH) * em;
-	const starts = variant.arrows.map(({ from }): Point => {
-		const box = boxes.get(from) as Box;
-		return { x: box.x + box.width, y: box.y + box.height / 2 };
-	});
+	const starts = variant.arrows.map(({ from }) =>
+		startOf(affordances.get(from) as LaidAffordance, em),
+	);
 	const areaRight = column.x + column.width + corridor;
 	const anchors = anchorsOf(variant, hemmedOf(variant));
 	const boxOf = (content: ModelPlace | ModelAffordance) =>
 		content.kind === "place"
 			? (places.get(content) as LaidPlace).frame
-			: (boxes.get(content) as Box);
+			: (affordances.get(content) as LaidAffordance).box;
 	const arrivals = spreadArrivals(
 		variant,
 		anchors,
@@ -116,6 +119,27 @@ export function routeArrows(
 		return { arrow, side, path: route(start, x, end, TURN_RADIUS * em) };
 	});
 	return { arrows, corridor };
+}
+
+/**
+ * Where the arrows from `laid` start: on the right side of its outline, at mid-height, for a button, a field or a select;
+ * DEPARTURE_GAP right of the end of its label's last line, at mid-height of that line, for an affordance without an
+ * outline, whose box is wider than its text by the room kept for the SVG's system fonts. A link's underline ends there
+ * too. Only a scribble has no label, and a scribble is copy, which never carries an arrow.
+ */
+function startOf(
+	{ affordance, box, label }: LaidAffordance,
+	em: number,
+): Point {
+	const { mark } = affordance;
+	if (mark === undefined || mark === "field" || mark === "select") {
+		return { x: box.x + box.width, y: box.y + box.height / 2 };
+	}
+	const { lines, x, weight, size, lineHeight, box: text } = label as TextBlock;
+	return {
+		x: x + measure(lines[lines.length - 1], weight, size) + DEPARTURE_GAP * em,
+		y: text.y + (lines.length - 0.5) * lineHeight,
+	};
 }
 
 /**
