@@ -92,24 +92,44 @@ describe("renderPng", () => {
 		assert.deepEqual([...png.subarray(0, 8)], PNG_SIGNATURE);
 	});
 
-	test("refuses a PNG with either side over 16384 pixels", async () => {
+	test("accepts 16384 pixels and reports exact dimensions above the limit on either side", async () => {
+		const horizontal = {
+			title: "W".repeat(44) + "i".repeat(12) + ".".repeat(3),
+			variants: [{ variant: "A", contains: [{ place: "P" }] }],
+		};
+		assert.deepEqual(
+			pngSize(await renderPng(horizontal, { fontSize: 96 })),
+			{ width: 16_384, height: 2_002 },
+		);
+		await assert.rejects(renderPng({ ...horizontal, title: `${horizontal.title}i` }, { fontSize: 95.366 }), {
+			name: "FatMarkerError",
+			field: "(root)",
+			message:
+				"(root): PNG of 16386 × 1992 pixels is over the 16384-pixel limit on a side; render SVG instead",
+		});
+
+		const vertical = {
+			variants: [{
+				variant: "A",
+				contains: Array.from({ length: 28 }, (_, i) => ({ place: `P${i}` })),
+			}],
+		};
+		assert.deepEqual(
+			pngSize(await renderPng(vertical, { fontSize: 68 })),
+			{ width: 852, height: 16_384 },
+		);
 		await assert.rejects(
-			renderPng(
-				{
-					title: "W".repeat(300),
-					variants: [{ variant: "A", contains: [{ place: "P" }] }],
-				},
-				{ fontSize: 96 },
-			),
-			(error: unknown) => {
-				assert.equal((error as { name: string }).name, "FatMarkerError");
-				assert.equal((error as { field: string }).field, "(root)");
-				assert.match((error as Error).message, /PNG of \d+ × \d+ pixels/);
-				assert.match(
-					(error as Error).message,
-					/over the 16384-pixel limit on a side; render SVG instead/,
-				);
-				return true;
+			renderPng({
+				variants: [{
+					variant: "A",
+					contains: Array.from({ length: 301 }, (_, i) => ({ place: `P${i}` })),
+				}],
+			}, { fontSize: 6.5 }),
+			{
+				name: "FatMarkerError",
+				field: "(root)",
+				message:
+					"(root): PNG of 96 × 16386 pixels is over the 16384-pixel limit on a side; render SVG instead",
 			},
 		);
 	});
