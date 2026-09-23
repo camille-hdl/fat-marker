@@ -33,8 +33,12 @@ const KAPPA = 0.5523;
  * start first.
  */
 const NESTED_MAX = 16;
-/** How far left of a left edge a direct arrow into it rises or falls: the middle of the gap between two contents of a row. */
-const RISE = 0.5;
+/**
+ * How far left of a left edge a direct arrow into it rises or falls: the middle of the gap between two places of a row,
+ * or rows that hold places (layout's PLACE_GAP). Next to an affordance, or a row of affordances, the gap is narrower,
+ * but the affordance at its end is the arrow's start: halfway to the edge is the middle of that gap.
+ */
+const RISE = 0.75;
 /** How far above the bottom corner of its right edge the lowest arrival into a hemmed place is: half a place's padding. */
 const LOW = 0.45;
 
@@ -362,7 +366,7 @@ function down(start: Point, end: Point, right: number, em: number): Cubic {
 
 /**
  * A direct arrow from `start`, leaving to the right, into a left edge at `end`, further right: it rises or falls in
- * the gap left of the edge, so that the arrows of the edge keep their order until then.
+ * the middle of the gap left of the edge, so that the arrows of the edge keep their order until then.
  */
 function across(start: Point, end: Point, em: number): Cubic {
 	const x = end.x - Math.min(RISE * em, (end.x - start.x) / 2);
@@ -371,8 +375,8 @@ function across(start: Point, end: Point, em: number): Cubic {
 
 /**
  * An arrow from `start`, leaving to the right, down or up the lane at `x`, to `end`, arriving to the left: a quarter
- * turn into the lane, a vertical run, a quarter turn out of it. When the ends are less than two turns apart in height,
- * a single cubic whose control points are on the lane.
+ * turn into the lane, a vertical run, a quarter turn out of it. When the ends are two turns apart in height or less,
+ * give or take a hundredth of a turn, a single cubic whose control points are on the lane.
  */
 function throughLane(
 	start: Point,
@@ -381,12 +385,12 @@ function throughLane(
 	radius: number,
 ): Cubic[] {
 	const height = end.y - start.y;
-	if (Math.abs(height) <= 2 * radius) {
-		return [[start, { x, y: start.y }, { x, y: end.y }, end]];
-	}
 	const down = Math.sign(height);
 	const into = { x, y: start.y + down * radius };
 	const outOf = { x, y: end.y - down * radius };
+	if (!runsBetween(into, outOf, height, radius)) {
+		return [[start, { x, y: start.y }, { x, y: end.y }, end]];
+	}
 	return [
 		quarterTurn(start, { x: 1, y: 0 }, into, { x: 0, y: down }),
 		straight(into, outOf),
@@ -417,10 +421,26 @@ function throughLaneFlat(
 	const level = { x: x - turn, y: end.y };
 	return [
 		quarterTurn(start, { x: 1, y: 0 }, into, { x: 0, y: down }),
-		...(Math.abs(height) > 2 * radius ? [straight(into, outOf)] : []),
+		...(runsBetween(into, outOf, height, radius)
+			? [straight(into, outOf)]
+			: []),
 		quarterTurn(outOf, { x: 0, y: down }, level, { x: -1, y: 0 }),
 		straight(level, end),
 	];
+}
+
+/**
+ * Whether an arrow `height` high, turning into its lane at `into` and out of it at `outOf`, runs down or up the lane
+ * between them: when that run is more than a hundredth of a turn long, so that ends two turns apart in height, give or
+ * take rounding, get none.
+ */
+function runsBetween(
+	into: Point,
+	outOf: Point,
+	height: number,
+	radius: number,
+): boolean {
+	return (outOf.y - into.y) * Math.sign(height) > radius / 100;
 }
 
 /** A cubic from `from`, leaving along the unit vector `leaving`, to `to`, arriving along the unit vector `arriving`. */

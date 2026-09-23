@@ -85,8 +85,13 @@ const HEADING_GAP = 0.8;
 const VARIANT_GAP = 2;
 const SKETCH_HEADING_GAP = 0.7;
 const SKETCH_WRAP_MIN = 24;
-/** Between the contents of a column or of a row. */
+/** Between the contents of a column or of a row, when one of them is an affordance, or a row of affordances only. */
 const CONTENT_GAP = 1;
+/**
+ * Between the contents of a column or of a row that are places, or rows that hold places: the thick strokes of their
+ * frames stay apart.
+ */
+const PLACE_GAP = 1.5;
 /** Inside a place's frame, around its name and contents. */
 const PLACE_PADDING = 0.9;
 /** Between a place's name and its contents. */
@@ -130,7 +135,12 @@ type MeasuredPlace = Size & {
 	contents: Measured[];
 };
 type MeasuredAffordance = Size & { kind: "affordance"; laid: LaidAffordance };
-type MeasuredRow = Size & { kind: "row"; contents: Measured[] };
+/** `holdsPlace`: one of its contents is a place, or a row that holds one. */
+type MeasuredRow = Size & {
+	kind: "row";
+	contents: Measured[];
+	holdsPlace: boolean;
+};
 
 /**
  * Places every element of a fat marker sketch: the top left of the first variant's column at (0, 0), variant names
@@ -308,24 +318,48 @@ function nameWrap(width: number, em: number): number {
 /** A row: its contents side by side, apart, as tall as the tallest. */
 function measureRow(row: ModelRow, em: number): MeasuredRow {
 	const contents = row.contents.map((content) => measureContent(content, em));
-	let width = CONTENT_GAP * em * (contents.length - 1);
+	let width = gapsAlong(contents, em);
 	let height = 0;
 	for (const content of contents) {
 		width += content.width;
 		height = Math.max(height, content.height);
 	}
-	return { kind: "row", contents, width, height };
+	const holdsPlace = contents.some(isPlaceLike);
+	return { kind: "row", contents, width, height, holdsPlace };
 }
 
 /** The size of `contents` stacked in a column, apart: as wide as the widest. */
 function columnSize(contents: Measured[], em: number): Size {
 	let width = 0;
-	let height = CONTENT_GAP * em * Math.max(0, contents.length - 1);
+	let height = gapsAlong(contents, em);
 	for (const content of contents) {
 		width = Math.max(width, content.width);
 		height += content.height;
 	}
 	return { width, height };
+}
+
+/** The sum of the gaps between the neighbours of `contents`, in a column or in a row. */
+function gapsAlong(contents: Measured[], em: number): number {
+	let sum = 0;
+	for (let i = 1; i < contents.length; i++) {
+		sum += gapBetween(contents[i - 1], contents[i], em);
+	}
+	return sum;
+}
+
+/**
+ * Between two neighbours of a column or of a row: wider between places, or rows that hold places, than next to an
+ * affordance or a row of affordances.
+ */
+function gapBetween(one: Measured, other: Measured, em: number): number {
+	const placeLike = isPlaceLike(one) && isPlaceLike(other);
+	return (placeLike ? PLACE_GAP : CONTENT_GAP) * em;
+}
+
+/** A place, or a row that holds one: its frames need the wider gap. */
+function isPlaceLike(content: Measured): boolean {
+	return content.kind === "row" ? content.holdsPlace : content.kind === "place";
 }
 
 /**
@@ -339,14 +373,15 @@ function placeColumn(
 	items: LaidVariant["items"],
 ): void {
 	let y = at.y;
-	for (const content of contents) {
+	for (const [i, content] of contents.entries()) {
+		if (i > 0) y += gapBetween(contents[i - 1], content, em);
 		placeContent(
 			content,
 			{ x: at.x, y, width: at.width, height: content.height },
 			em,
 			items,
 		);
-		y += content.height + CONTENT_GAP * em;
+		y += content.height;
 	}
 }
 
@@ -361,14 +396,15 @@ function placeRow(
 	items: LaidVariant["items"],
 ): void {
 	let left = at.x;
-	for (const content of row.contents) {
+	for (const [i, content] of row.contents.entries()) {
+		if (i > 0) left += gapBetween(row.contents[i - 1], content, em);
 		placeContent(
 			content,
 			{ x: left, y: at.y, width: content.width, height: at.height },
 			em,
 			items,
 		);
-		left += content.width + CONTENT_GAP * em;
+		left += content.width;
 	}
 }
 

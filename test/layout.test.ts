@@ -30,6 +30,9 @@ const theme = readTheme(undefined);
 const em = theme.fontSize;
 /** The smallest gap the invariants accept between two elements. */
 const GAP = 0.25 * em;
+/** Between two neighbours of a column or of a row when one of them is an affordance, and when neither is. */
+const CONTENT_GAP = 1 * em;
+const PLACE_GAP = 1.5 * em;
 /** Between two lanes of a corridor. */
 const LANE = 0.6 * em;
 /** Between two arrivals on a side edge, when it is tall enough. */
@@ -363,6 +366,20 @@ function siblingGroups(variant: LaidVariant): Siblings[] {
 	return groups;
 }
 
+/**
+ * The gap between two neighbours of a column or of a row: wider between places, or rows that hold places, than next to
+ * an affordance or a row of affordances.
+ */
+function siblingGap(one: ModelContent, other: ModelContent): number {
+	return framesPlace(one) && framesPlace(other) ? PLACE_GAP : CONTENT_GAP;
+}
+
+/** Whether `content` is a place, or a row with a place in it, at any depth of nested rows. */
+function framesPlace(content: ModelContent): boolean {
+	if (content.kind === "row") return content.contents.some(framesPlace);
+	return content.kind === "place";
+}
+
 /** The places and affordances of `contents`, in document order, a place before its contents. */
 function documentOrder(
 	contents: ModelContent[],
@@ -669,11 +686,12 @@ const invariants: [string, (sketch: Sketch, laid: Layout) => void][] = [
 					for (let i = 1; i < boxes.length; i++) {
 						const [before, after] = [boxes[i - 1], boxes[i]];
 						const what = `${nameOf(contents[i - 1])} then ${nameOf(contents[i])}`;
+						const gap = siblingGap(contents[i - 1], contents[i]);
 						if (direction === "column") {
-							assert.ok(bottom(before) + GAP <= after.y, what);
+							assert.ok(bottom(before) + gap <= after.y + EPSILON, what);
 							assert.ok(close(before.x, after.x), what);
 						} else {
-							assert.ok(right(before) + GAP <= after.x, what);
+							assert.ok(right(before) + gap <= after.x + EPSILON, what);
 							assert.ok(close(before.y, after.y), what);
 						}
 					}
@@ -1338,6 +1356,119 @@ describe("layout", () => {
 		assert.equal(stretched.box.width, alone.box.width);
 	});
 
+	/**
+	 * Lays out a variant holding `contains`, and measures the gap between the boxes of the two contents that `pick`
+	 * finds in its column: the first above, or left of, the second.
+	 */
+	const measuredGap = (
+		contains: Variant["contains"],
+		pick: (contents: ModelContent[]) => ModelContent[],
+	): number => {
+		const [variant] = laidOut({
+			variants: [{ variant: "A", contains }],
+		}).variants;
+		const [one, other] = pick(variant.variant.contents).map(boxFinder(variant));
+		return Math.max(other.y - bottom(one), other.x - right(one));
+	};
+	const contentsOf = (content: ModelContent) =>
+		content.kind === "affordance" ? [] : content.contents;
+
+	test("sets a 1.5 em gap between two places stacked in a variant's column", () => {
+		const gap = measuredGap(
+			[{ place: "Plot list" }, { place: "Booking" }],
+			(contents) => contents,
+		);
+		assert.ok(close(gap, 1.5 * em), String(gap));
+	});
+
+	test("sets a 1.5 em gap between two places nested in a place", () => {
+		const gap = measuredGap(
+			[{ place: "Plot", contains: [{ place: "Map" }, { place: "Shed" }] }],
+			([plot]) => contentsOf(plot),
+		);
+		assert.ok(close(gap, 1.5 * em), String(gap));
+	});
+
+	test("sets a 1.5 em gap between two places in a row", () => {
+		const gap = measuredGap(
+			[{ row: [{ place: "Map" }, { place: "Shed" }] }],
+			([row]) => contentsOf(row),
+		);
+		assert.ok(close(gap, 1.5 * em), String(gap));
+	});
+
+	test("sets a 1.5 em gap between a place and a row of places in a column", () => {
+		const gap = measuredGap(
+			[{ place: "Plot list" }, { row: [{ place: "Map" }, { place: "Shed" }] }],
+			(contents) => contents,
+		);
+		assert.ok(close(gap, 1.5 * em), String(gap));
+	});
+
+	test("keeps a 1 em gap between two buttons", () => {
+		const gap = measuredGap(
+			[
+				{
+					place: "Plot",
+					contains: [{ affordance: "Book" }, { affordance: "Swap" }],
+				},
+			],
+			([plot]) => contentsOf(plot),
+		);
+		assert.ok(close(gap, em), String(gap));
+	});
+
+	test("keeps a 1 em gap between a button and a nested place", () => {
+		const gap = measuredGap(
+			[
+				{
+					place: "Plot",
+					contains: [{ affordance: "Book" }, { place: "Shed" }],
+				},
+			],
+			([plot]) => contentsOf(plot),
+		);
+		assert.ok(close(gap, em), String(gap));
+	});
+
+	test("keeps a 1 em gap between two rows of buttons stacked in a place", () => {
+		const gap = measuredGap(
+			[
+				{
+					place: "Editor",
+					contains: [
+						{ row: [{ affordance: "Bold" }, { affordance: "Italic" }] },
+						{ row: [{ affordance: "Copy" }, { affordance: "Paste" }] },
+					],
+				},
+			],
+			([editor]) => contentsOf(editor),
+		);
+		assert.ok(close(gap, em), String(gap));
+	});
+
+	test("keeps a 1 em gap between a row of buttons and a place beside it in a row", () => {
+		const gap = measuredGap(
+			[
+				{
+					place: "Plot",
+					contains: [
+						{
+							row: [
+								{
+									row: [{ affordance: "Zoom in" }, { affordance: "Zoom out" }],
+								},
+								{ place: "Map" },
+							],
+						},
+					],
+				},
+			],
+			([plot]) => contentsOf(contentsOf(plot)[0]),
+		);
+		assert.ok(close(gap, em), String(gap));
+	});
+
 	test("wraps long sketch headings and aligns variant names on a shared baseline", () => {
 		const laid = laidOut(sketches["long headings and variant names"]);
 		assert.ok(laid.title && laid.title.lines.length > 1);
@@ -1682,6 +1813,34 @@ describe("layout", () => {
 		}).variants;
 		assert.ok(variant.arrows.every(({ side }) => side === "left"));
 		neverCross(variant.arrows);
+	});
+
+	test("turns an arrow into a left edge in the middle of the gap left of it: 0.75 em from a place, 0.5 em from a button", () => {
+		const turn = (contains: Variant["contains"]) => {
+			const [variant, arrow] = arrowFrom("Open", contains);
+			const [[, one, other]] = arrow.path;
+			assert.equal(arrow.side, "left");
+			assert.equal(one.x, other.x);
+			return placeNamed(variant, "Map").frame.x - one.x;
+		};
+		const fromPlace = turn([
+			{
+				row: [
+					{ place: "Plot", contains: [{ affordance: "Open", to: "Map" }] },
+					{ place: "Map" },
+				],
+			},
+		]);
+		const fromButton = turn([
+			{
+				place: "Plot",
+				contains: [
+					{ row: [{ affordance: "Open", to: "Map" }, { place: "Map" }] },
+				],
+			},
+		]);
+		assert.ok(close(fromPlace, 0.75 * em), String(fromPlace));
+		assert.ok(close(fromButton, 0.5 * em), String(fromButton));
 	});
 
 	test("reserves no corridor for a variant whose arrows are all direct: its area is as wide as its column", () => {
@@ -2031,6 +2190,57 @@ describe("layout", () => {
 		const [arrow] = variant.arrows;
 		assert.equal(arrow.side, "right");
 		assert.equal(arrow.path.length, 1);
+	});
+
+	test("routes a corridor arrow whose ends are two turns apart in height, give or take rounding, with no run down its lane", () => {
+		// the wrapped names and labels put "Visit…" 2 em below the upper of the two arrivals into Shed, and the Gate above
+		// shifts them to where floating-point sums leave a run of 6e-14 px
+		const arrow = arrowsOf(
+			laidOut({
+				variants: [
+					{
+						variant: "A",
+						contains: [
+							{ place: "Gate", contains: [{ affordance: "Open" }] },
+							{
+								row: [
+									{
+										place: "Plot 12, sunny, next to the shed, with a long name",
+										contains: [
+											{ place: "Shed" },
+											{
+												affordance: "Store tools",
+												mark: "checkbox",
+												to: "Shed",
+											},
+										],
+									},
+									{
+										place: "Garden of the allotment society",
+										contains: [
+											{
+												affordance: "Rules voted at the general meeting",
+												mark: "chevron",
+											},
+											{
+												affordance: "Visit the shed and the plot next to it",
+												to: "Shed",
+											},
+										],
+									},
+								],
+							},
+						],
+					},
+				],
+			}).variants[0],
+		).get("Visit the shed and the plot next to it → Shed");
+		assert.ok(arrow);
+		assert.equal(arrow.side, "right");
+		const height = lastPoint(arrow).y - arrow.path[0][0].y;
+		assert.ok(close(height, -2 * em), String(height));
+		// a turn into the lane, a turn out of it to the height of the arrival, straight into the hemmed place
+		assert.equal(arrow.path.length, 3);
 	});
 
 	test("lays out places nested 20 deep", () => {
