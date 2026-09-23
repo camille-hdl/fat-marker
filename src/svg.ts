@@ -217,11 +217,20 @@ function arrowStrokes(
 	layout: Layout,
 	theme: Theme,
 ): { stroke: string; halo: string }[] {
-	return layout.variants.flatMap(({ arrows }) =>
-		arrows.map(({ arrow: { key }, path }) =>
-			arrow(path, theme.fontSize, wobble(theme, key)),
-		),
-	);
+	return layout.variants.flatMap(({ items, arrows }) => {
+		const frames = new Map<ModelPlace, Box>();
+		for (const item of items) {
+			if (item.kind === "place") frames.set(item.place, item.frame);
+		}
+		return arrows.map(({ arrow: { key, to }, side, path }) =>
+			arrow(
+				path,
+				{ frame: frames.get(to) as Box, side },
+				theme.fontSize,
+				wobble(theme, key),
+			),
+		);
+	});
 }
 
 /** The halo under an arrow, in the background color. */

@@ -1,7 +1,7 @@
 // from @camille-hdl/hill-chart@0.2.0, 738a559
 // functions dotPath (its parameter typed on its own), wobble (citing ADR 0003), shake, smooth, xy, fnv1a, mulberry32, num and escapeXml; stroke adapted from wavyLine; the rest is new
 import type { Theme } from "./input.ts";
-import type { Box, Cubic, Point } from "./layout.ts";
+import type { Box, Cubic, LaidArrow, Point } from "./layout.ts";
 
 /** Enough vertices for a dot to stay round once smoothed. */
 const DOT_VERTICES = 12;
@@ -29,14 +29,16 @@ const WAVE_HEIGHT = 0.17;
 const WAVE_WOBBLE = 0.04;
 /** How far each inner control point of an arrow's cubics is shaken at most. */
 const ARROW_WOBBLE = 0.2;
-/** The length of each stroke of an arrow's head. */
+/** The length of each stroke of an arrow's head, and of the end of the curve its axis follows. */
 const HEAD_LENGTH = 0.8;
-/** The narrowest angle, in radians, between a stroke of an arrow's head and the arrow's last tangent. */
+/** The narrowest angle, in radians, between a stroke of an arrow's head and its axis. */
 const HEAD_ANGLE = 0.45;
 /** How much wider than HEAD_ANGLE that angle can be, in radians. */
 const HEAD_ANGLE_SPREAD = 0.1;
-/** How far short of an arrow's tip its halo stops, so that it does not open the frame the head touches. */
+/** How far outside its target's edge an arrow's halo stops, so that the frame's stroke stays whole where the arrow enters. */
 const HALO_SHORTFALL = 0.4;
+/** Samples along the last cubic of an arrow, from its tip back, before a bisection finds where it leaves a condition. */
+const END_SAMPLES = 32;
 
 export type Random = () => number;
 
@@ -110,25 +112,40 @@ export function wavy(
 }
 
 /**
- * An arrow along `path`: its cubics, only their inner control points shaken, then an open V head of two strokes at its
- * end, along the last tangent drawn. The last control point is not shaken, so the arrow arrives along the tangent of
- * `path`, square into its edge, and its head with it. Its halo follows the same cubics, without the head, and stops
- * HALO_SHORTFALL short of the tip.
+ * An arrow along `path`, into the `side` edge of `frame`: its cubics, only their inner control points shaken, then an
+ * open V head of two strokes at its end. The head follows the curve as drawn: its axis runs from the point of the
+ * curve HEAD_LENGTH from the tip, to the tip. The last control point is not shaken, so that the Wobble does not tilt
+ * the end of the curve. Its halo follows the same cubics, without the head, and stops HALO_SHORTFALL outside the edge.
  */
 export function arrow(
 	path: Cubic[],
+	{ frame, side }: { frame: Box; side: LaidArrow["side"] },
 	em: number,
 	random: Random,
 ): { stroke: string; halo: string } {
 	const cubics = path.map((cubic) => shakenCubic(cubic, em, random));
 	const [start, c1, , tip] = cubics[cubics.length - 1];
-	const control = path[path.length - 1][2];
-	const last: Cubic = [start, c1, control, tip];
+	const last: Cubic = [start, c1, path[path.length - 1][2], tip];
 	cubics[cubics.length - 1] = last;
+	const [, , , axis] = upTo(
+		last,
+		(point) => Math.hypot(point.x - tip.x, point.y - tip.y) > HEAD_LENGTH * em,
+	);
+	const halo = upTo(
+		last,
+		(point) => outside(point, frame, side) >= HALO_SHORTFALL * em,
+	);
 	return {
-		stroke: `${curve(cubics)} ${head(tip, control, em, random)}`,
-		halo: curve([...cubics.slice(0, -1), shortOf(last, HALO_SHORTFALL * em)]),
+		stroke: `${curve(cubics)} ${head(tip, axis, em, random)}`,
+		halo: curve([...cubics.slice(0, -1), halo]),
 	};
+}
+
+/** How far `point` is outside the `side` edge of `frame`: less than 0 inside. */
+function outside(point: Point, frame: Box, side: LaidArrow["side"]): number {
+	if (side === "top") return frame.y - point.y;
+	if (side === "left") return frame.x - point.x;
+	return point.x - (frame.x + frame.width);
 }
 
 /** Joined cubics as a path. */
@@ -139,14 +156,18 @@ function curve(cubics: Cubic[]): string {
 	].join(" ");
 }
 
-/** The part of `cubic` from its start to where it comes within `distance` of its end, found by bisection. */
-function shortOf(cubic: Cubic, distance: number): Cubic {
-	const end = cubic[3];
-	let [from, to] = [0, 1];
+/**
+ * The part of `cubic` from its start to the last point where `holds` does, its end not holding it: found by sampling
+ * from its end back, END_SAMPLES times, then by bisection. From its start alone when no sample holds.
+ */
+function upTo(cubic: Cubic, holds: (point: Point) => boolean): Cubic {
+	const at = (t: number) => split(cubic, t)[3];
+	let k = END_SAMPLES - 1;
+	while (k > 0 && !holds(at(k / END_SAMPLES))) k--;
+	let [from, to] = [k / END_SAMPLES, (k + 1) / END_SAMPLES];
 	for (let i = 0; i < 20; i++) {
 		const t = (from + to) / 2;
-		const [, , , point] = split(cubic, t);
-		if (Math.hypot(point.x - end.x, point.y - end.y) > distance) from = t;
+		if (holds(at(t))) from = t;
 		else to = t;
 	}
 	return split(cubic, from);

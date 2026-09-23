@@ -41,13 +41,15 @@ const NESTED_MAX = 16;
 const RISE = 0.75;
 /** How far above the bottom corner of its right edge the lowest arrival into a hemmed place is: half a place's padding. */
 const LOW = 0.45;
+/** How far inside its target's frame an arrow ends, past the edge it reaches, so that its head reads as entering. */
+const ENTRY_DEPTH = 0.8;
 
 /**
  * Routes the arrows of `variant`, laid out as `items` in `column`, in data order. An arrow to the place just below its
  * affordance's branch reaches its top edge, and one to the place just right of it in a row its left edge, each in one
  * cubic; every other arrow runs through its own lane in a corridor right of the column, into the right edge of its
- * target, with a flat last turn when that target is hemmed. Also returns the width the corridor takes right of the
- * column.
+ * target, with a flat last turn when that target is hemmed. Each ends ENTRY_DEPTH past the edge it reaches. Also
+ * returns the width the corridor takes right of the column.
  */
 export function routeArrows(
 	variant: ModelVariant,
@@ -162,7 +164,7 @@ function hemmedOf(variant: ModelVariant): Set<ModelPlace> {
  * from the middle of the name's first line, or evenly down to the bottom corner of the frame when that would pass it.
  * On the right edge of a `hemmed` place, they go up instead, every ARRIVAL_STEP from LOW above the bottom corner, or
  * evenly up to the middle of the name's first line. They go to the arrows of the edge in an order that keeps them from
- * crossing before their heads.
+ * crossing before their heads. Each arrival is ENTRY_DEPTH inside the frame, past its edge.
  */
 function spreadArrivals(
 	variant: ModelVariant,
@@ -186,16 +188,18 @@ function spreadArrivals(
 	const arrivals: Point[] = [];
 	for (const { to, side, arrows } of edges.values()) {
 		const { frame, name } = places.get(to) as LaidPlace;
+		const depth = ENTRY_DEPTH * em;
 		if (side === "top") {
 			const slots = topSlots(frame, arrows, starts, em);
+			const y = frame.y + depth;
 			const order =
 				arrows.length > NESTED_MAX
 					? [...arrows].sort((one, other) => starts[other].y - starts[one].y)
 					: nestedOrder(arrows, slots, starts, (i, x) =>
-							down(starts[i], { x, y: frame.y }, right, em),
+							down(starts[i], { x, y }, right, em),
 						);
 			for (const [slot, i] of order.entries()) {
-				arrivals[i] = { x: slots[slot], y: frame.y };
+				arrivals[i] = { x: slots[slot], y };
 			}
 			continue;
 		}
@@ -207,7 +211,7 @@ function spreadArrivals(
 				? Math.min(ARRIVAL_STEP * em, (lowest - top) / (arrows.length - 1))
 				: 0;
 		const first = low ? lowest - (arrows.length - 1) * step : top;
-		const x = side === "left" ? frame.x : frame.x + frame.width;
+		const x = side === "left" ? frame.x + depth : frame.x + frame.width - depth;
 		const middle = { x, y: first + ((arrows.length - 1) * step) / 2 };
 		const order =
 			side === "left"
@@ -365,11 +369,12 @@ function down(start: Point, end: Point, right: number, em: number): Cubic {
 }
 
 /**
- * A direct arrow from `start`, leaving to the right, into a left edge at `end`, further right: it rises or falls in
- * the middle of the gap left of the edge, so that the arrows of the edge keep their order until then.
+ * A direct arrow from `start`, leaving to the right, to `end`, ENTRY_DEPTH past a left edge further right: it rises or
+ * falls in the middle of the gap left of the edge, so that the arrows of the edge keep their order until then.
  */
 function across(start: Point, end: Point, em: number): Cubic {
-	const x = end.x - Math.min(RISE * em, (end.x - start.x) / 2);
+	const edge = end.x - ENTRY_DEPTH * em;
+	const x = edge - Math.min(RISE * em, (edge - start.x) / 2);
 	return [start, { x, y: start.y }, { x, y: end.y }, end];
 }
 

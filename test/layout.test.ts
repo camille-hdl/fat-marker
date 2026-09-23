@@ -39,6 +39,8 @@ const VARIANT_GAP = 2 * em;
 const LANE = 0.6 * em;
 /** Between two arrivals on a side edge, when it is tall enough. */
 const ARRIVAL_STEP = 1 * em;
+/** How far inside its target's frame an arrow ends, past the edge it reaches. */
+const ENTRY_DEPTH = 0.8 * em;
 /** The smallest margin the invariants accept between the content and the edge of the viewBox. */
 const MARGIN = 0.5 * em;
 /** Button labels wrap at this width. */
@@ -463,6 +465,20 @@ function onEdge(point: Point, frame: Box, side: LaidArrow["side"]): boolean {
 const pointsOf = ({ path }: LaidArrow) => path.flat();
 const firstPoint = ({ path }: LaidArrow) => path[0][0];
 const lastPoint = ({ path }: LaidArrow) => path[path.length - 1][3];
+/** Into its frame, away from each edge. */
+const INWARD: Record<LaidArrow["side"], Point> = {
+	top: { x: 0, y: 1 },
+	left: { x: 1, y: 0 },
+	right: { x: -1, y: 0 },
+};
+/** Where an arrow reaches the edge of its target: ENTRY_DEPTH back from its last point, at the same place along the edge. */
+function arrivalOf(laidArrow: LaidArrow): Point {
+	const [last, inward] = [lastPoint(laidArrow), INWARD[laidArrow.side]];
+	return {
+		x: last.x - inward.x * ENTRY_DEPTH,
+		y: last.y - inward.y * ENTRY_DEPTH,
+	};
+}
 
 /**
  * The `x` of a corridor arrow's lane: that of both inner control points of a single cubic, which the lane holds, or of
@@ -950,7 +966,7 @@ const invariants: [string, (sketch: Sketch, laid: Layout) => void][] = [
 		},
 	],
 	[
-		"starts an arrow on the right side of its affordance at mid-height, and ends it on the side edge of its target (arrow invariant 1)",
+		"starts an arrow on the right side of its affordance at mid-height, and ends it ENTRY_DEPTH inside its target, past the side edge it reaches (arrow invariant 1)",
 		(_, laid) => {
 			for (const variant of laid.variants) {
 				const [affordances, places] = [
@@ -962,11 +978,11 @@ const invariants: [string, (sketch: Sketch, laid: Layout) => void][] = [
 					const box = affordances.get(arrow.from)?.box;
 					const frame = places.get(arrow.to)?.frame;
 					assert.ok(box && frame);
-					const [first, last] = [firstPoint(laidArrow), lastPoint(laidArrow)];
+					const first = firstPoint(laidArrow);
 					const what = arrowName(laidArrow);
 					assert.ok(close(first.x, right(box)), what);
 					assert.ok(close(first.y, box.y + box.height / 2), what);
-					assert.ok(onEdge(last, frame, side), what);
+					assert.ok(onEdge(arrivalOf(laidArrow), frame, side), what);
 				}
 			}
 		},
@@ -1608,7 +1624,7 @@ describe("layout", () => {
 		return place;
 	};
 
-	test("classifies an arrow to the place just below its affordance's place as below: one cubic into the middle of its top edge", () => {
+	test("classifies an arrow to the place just below its affordance's place as below: one cubic into the middle of its top edge, 0.8 em past it", () => {
 		const [variant, arrow] = arrowFrom("Book", [
 			{ place: "Plot list", contains: [{ affordance: "Book", to: "Booking" }] },
 			{ place: "Booking" },
@@ -1618,7 +1634,7 @@ describe("layout", () => {
 		assert.equal(arrow.path.length, 1);
 		assert.deepEqual(lastPoint(arrow), {
 			x: frame.x + frame.width / 2,
-			y: frame.y,
+			y: frame.y + ENTRY_DEPTH,
 		});
 	});
 
@@ -1634,10 +1650,10 @@ describe("layout", () => {
 		]);
 		const { frame } = placeNamed(variant, "Shed");
 		assert.equal(arrow.side, "top");
-		assert.ok(onEdge(lastPoint(arrow), frame, "top"));
+		assert.ok(onEdge(arrivalOf(arrow), frame, "top"));
 	});
 
-	test("classifies an arrow to the place just right of its branch in a row as right: into its left edge, at the height of its name", () => {
+	test("classifies an arrow to the place just right of its branch in a row as right: into its left edge, at the height of its name, 0.8 em past it", () => {
 		const [variant, arrow] = arrowFrom("Open", [
 			{
 				place: "Plot",
@@ -1655,7 +1671,7 @@ describe("layout", () => {
 		assert.equal(arrow.side, "left");
 		assert.equal(arrow.path.length, 1);
 		assert.deepEqual(lastPoint(arrow), {
-			x: frame.x,
+			x: frame.x + ENTRY_DEPTH,
 			y: name.box.y + name.lineHeight / 2,
 		});
 	});
@@ -1746,7 +1762,7 @@ describe("layout", () => {
 			variant.arrows.map((arrow) => [arrow.side, lastPoint(arrow)]),
 			[3, 2, 1].map((i) => [
 				"top",
-				{ x: left + em + (i * part) / 4, y: frame.y },
+				{ x: left + em + (i * part) / 4, y: frame.y + ENTRY_DEPTH },
 			]),
 		);
 		for (const arrow of variant.arrows) {
@@ -1780,7 +1796,7 @@ describe("layout", () => {
 			variant.arrows.map(lastPoint).sort((one, other) => one.x - other.x),
 			[1, 2, 3, 4].map((i) => ({
 				x: frame.x + (i * frame.width) / 5,
-				y: frame.y,
+				y: frame.y + ENTRY_DEPTH,
 			})),
 		);
 	});
