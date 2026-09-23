@@ -108,7 +108,7 @@ const GLYPHS: Record<
 	radio: [0.8, 0.8],
 	toggle: [1.6, 0.9],
 	chevron: [0.35, 0.6],
-	handle: [0.6, 0.5],
+	handle: [0.6, 0.6],
 };
 /** The band a link's wavy underline runs in, under the bottom of its label: its waves stay below the descenders. */
 const UNDERLINE_HEIGHT = 0.6;

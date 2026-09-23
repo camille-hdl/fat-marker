@@ -484,6 +484,57 @@ describe("renderSvg", () => {
 		}
 	});
 
+	test("keeps paper between the three strokes of a handle, even where they shake", () => {
+		const handles = [
+			"Reorder favourites",
+			"Move this plot",
+			"Drag to sort",
+			"Sort crops",
+			"Rearrange beds",
+			"Order by season",
+			"Reorder tools",
+			"Move up or down",
+			"Sort the rota",
+			"Reorder seeds",
+		];
+		const svg = renderSvg({
+			variants: [
+				{
+					variant: "A",
+					contains: [
+						{
+							place: "P",
+							contains: handles.map((affordance) => ({
+								affordance,
+								mark: "handle",
+							})),
+						},
+					],
+				},
+			],
+		});
+		for (const group of affordanceGroups(svg)) {
+			const [{ text, d }] = drawnGroups(group);
+			// Each stroke lies between the highest and the lowest of its points and control points.
+			const strokes = d
+				.split("M")
+				.filter(Boolean)
+				.map((stroke) =>
+					[...stroke.matchAll(/-?\d+\.\d,(-?\d+\.\d)/g)].map(([, y]) =>
+						Number(y),
+					),
+				);
+			assert.equal(strokes.length, 3, text);
+			for (const [above, below] of [
+				[strokes[0], strokes[1]],
+				[strokes[1], strokes[2]],
+			]) {
+				const paper = Math.min(...below) - Math.max(...above) - 2.5;
+				assert.ok(paper >= 2.5 / 2, `${text}: ${paper}`);
+			}
+		}
+	});
+
 	test("draws copy as bare text in ink, on the left", () => {
 		const [plot] = affordanceGroups(renderSvg(fixture("copy-scribble")));
 		assert.doesNotMatch(plot, /<path/);

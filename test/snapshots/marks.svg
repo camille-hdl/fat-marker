@@ -57,7 +57,7 @@
   <text text-anchor="start" font-family="'Atkinson Hyperlegible Next', Avenir, 'Segoe UI', Seravek, Ubuntu, Calibri, 'DejaVu Sans', sans-serif" font-size="18.0" font-weight="600" fill="#262a33"><tspan x="29.7" y="473.4">Plot details</tspan></text>
 </g>
 <g class="affordance">
-  <path d="M14.5,503.1 C15.8,503.2 19.8,503.9 22.0,503.9 C24.3,503.9 27.2,503.2 28.2,503.1 M15.2,507.6 C16.3,507.5 19.9,506.8 22.0,506.8 C24.1,506.8 26.7,507.5 27.7,507.6 M14.7,512.1 C15.6,512.1 18.4,512.4 20.5,512.4 C22.7,512.4 26.3,512.1 27.4,512.1" fill="none" stroke="#262a33" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M14.5,502.2 C15.8,502.3 19.8,503.0 22.0,503.0 C24.3,503.0 27.2,502.3 28.2,502.2 M15.2,507.6 C16.3,507.5 19.9,506.8 22.0,506.8 C24.1,506.8 26.7,507.5 27.7,507.6 M14.7,513.0 C15.6,513.0 18.4,513.3 20.5,513.3 C22.7,513.3 26.3,513.0 27.4,513.0" fill="none" stroke="#262a33" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
   <text text-anchor="start" font-family="'Atkinson Hyperlegible Next', Avenir, 'Segoe UI', Seravek, Ubuntu, Calibri, 'DejaVu Sans', sans-serif" font-size="18.0" font-weight="600" fill="#262a33"><tspan x="34.2" y="513.9">Reorder favourites</tspan></text>
 </g>
 <g class="affordance">
