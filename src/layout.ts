@@ -313,19 +313,21 @@ function placeColumn(
 	}
 }
 
-/** Sets `row`'s contents side by side from (`x`, `y`), aligned top, each place stretched to the row's height. */
+/**
+ * Sets `row`'s contents side by side from the top left of `at`, aligned top, each place stretched to the height of `at`:
+ * the row's own, or that of the row it is in.
+ */
 function placeRow(
 	row: MeasuredRow,
-	x: number,
-	y: number,
+	at: Box,
 	em: number,
 	items: LaidVariant["items"],
 ): void {
-	let left = x;
+	let left = at.x;
 	for (const content of row.contents) {
 		placeContent(
 			content,
-			{ x: left, y, width: content.width, height: row.height },
+			{ x: left, y: at.y, width: content.width, height: at.height },
 			em,
 			items,
 		);
@@ -334,8 +336,8 @@ function placeRow(
 }
 
 /**
- * Lays `measured` out at the top left of `at`, and appends it and its contents to `items`, in document order. Only a
- * place takes the size of `at`: affordances and rows never stretch.
+ * Lays `measured` out at the top left of `at`, and appends it and its contents to `items`, in document order. A place
+ * takes the size of `at`, a row only its height, which it passes on to its places: affordances never stretch.
  */
 function placeContent(
 	measured: Measured,
@@ -346,7 +348,7 @@ function placeContent(
 	if (measured.kind === "affordance") {
 		items.push(moveAffordance(measured.laid, at.x, at.y));
 	} else if (measured.kind === "row") {
-		placeRow(measured, at.x, at.y, em, items);
+		placeRow(measured, at, em, items);
 	} else {
 		placePlace(measured, at, em, items);
 	}

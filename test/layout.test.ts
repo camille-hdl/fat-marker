@@ -262,6 +262,13 @@ function documentOrder(
 	);
 }
 
+/** `contents`, with each row replaced by its contents, at any depth of rows. */
+function throughRows(contents: ModelContent[]): ModelContent[] {
+	return contents.flatMap((content) =>
+		content.kind === "row" ? throughRows(content.contents) : [content],
+	);
+}
+
 /** Finds the box of any content of `variant`: a place's frame, an affordance's box, the extent of a row. */
 function boxFinder(variant: LaidVariant): (content: ModelContent) => Box {
 	const boxes = new Map<ModelContent, Box>();
@@ -513,7 +520,7 @@ const invariants: [string, (sketch: Sketch, laid: Layout) => void][] = [
 		},
 	],
 	[
-		"gives the places of a column its width, and the places of a row its height (invariant 5)",
+		"gives the places of a column its width, and the places of a row and of the rows in it its height (invariant 5)",
 		(_, laid) => {
 			for (const variant of laid.variants) {
 				const boxOf = boxFinder(variant);
@@ -524,7 +531,10 @@ const invariants: [string, (sketch: Sketch, laid: Layout) => void][] = [
 					);
 					if (direction === "row") {
 						const row = boundingBox(contents.map(boxOf));
-						for (const place of siblings) {
+						const inRow = throughRows(contents).filter(
+							(content) => content.kind === "place",
+						);
+						for (const place of inRow) {
 							assert.ok(
 								close(boxOf(place).height, row.height),
 								place.name.text,
