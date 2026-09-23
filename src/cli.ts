@@ -1,5 +1,5 @@
 // from @camille-hdl/hill-chart@0.2.0, 738a559
-// adapted: renamed for fat-marker (FatMarkerError, name, messages); SVG only, without --format, --theme nor PNG; provisional help; the input limit's comment rewritten
+// adapted: renamed for fat-marker (FatMarkerError, name, messages); SVG only, without --format nor PNG; provisional help; the input limit's comment rewritten
 import { createReadStream } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
 import { extname } from "node:path";
@@ -13,7 +13,7 @@ export type Io = {
 	stderr: NodeJS.WritableStream;
 };
 
-const help = `Usage: fat-marker [input.json|-] [-o out.svg]
+const help = `Usage: fat-marker [input.json|-] [--theme theme.json] [-o out.svg]
 
 Draws a fat marker sketch (Shape Up, chapter 4) as SVG from a JSON description of its
 variants, places and affordances. Reads stdin when given no input file, or "-".
@@ -30,7 +30,7 @@ Examples:
 
 Exit codes:
   0  success
-  1  invalid JSON or data, or an input over 1 MiB; the message names the file, and the field when there is one
+  1  invalid JSON, data or theme, or an input over 1 MiB; the message names the file, and the field when there is one
   2  usage error, or a file that cannot be read or written
 `;
 
@@ -70,7 +70,11 @@ export async function run(args: string[], io: Io): Promise<number> {
 			themeSource === undefined
 				? undefined
 				: parseJson(await readFileText(themeSource), themeSource);
-		const image = draw(data, source, theme, themeSource);
+		const image = draw(
+			data,
+			source,
+			themeSource === undefined ? undefined : { theme, path: themeSource },
+		);
 		if (values.output === undefined) io.stdout.write(image);
 		else await writeOutput(values.output, image);
 		return 0;
@@ -181,20 +185,22 @@ function parseJson(json: string, source: string): unknown {
 	}
 }
 
-/** Draws `data`, read from `source`, and reports an error in it against `source`. */
+/** Draws `data` from `source`, reporting a theme error against the theme file when one was given. */
 function draw(
 	data: unknown,
 	source: string,
-	theme?: unknown,
-	themeSource?: string,
+	themeFile?: { theme: unknown; path: string },
 ): string {
 	try {
 		// renderSvg validates its input at runtime: data read from JSON is safe to pass as is.
-		return renderSvg(data as Sketch, theme as Partial<Theme> | undefined);
+		return renderSvg(
+			data as Sketch,
+			themeFile?.theme as Partial<Theme> | undefined,
+		);
 	} catch (error) {
 		if (error instanceof FatMarkerError)
 			throw new Failure(
-				`${themeSource && /^(theme(?:\.|\[|$))/.test(error.field) ? themeSource : source}: ${error.message}`,
+				`${themeFile && /^theme($|[.[])/.test(error.field) ? themeFile.path : source}: ${error.message}`,
 				1,
 			);
 		throw error;

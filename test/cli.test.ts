@@ -198,6 +198,27 @@ describe("run", () => {
 			assert.ok(stderr.includes(reason), stderr);
 		}
 
+		for (const [name, json, field, reason] of [
+			["array-theme.json", "[]", "theme", "expected an object"],
+			["empty-key-theme.json", '{"":1}', 'theme[""]', "unknown key"],
+		] as const) {
+			const path = tempFile(name, json);
+			const { code, stderr } = await runCli([minimalPath, "--theme", path]);
+			assert.equal(code, 1);
+			assert.ok(stderr.startsWith(`fat-marker: ${path}: ${field}:`), stderr);
+			assert.ok(stderr.includes(reason), stderr);
+		}
+
+		const badData = tempFile("invalid-data-with-theme.json", '{"variants":[]}');
+		const invalidData = await runCli([badData, "--theme", ink]);
+		assert.equal(invalidData.code, 1);
+		assert.ok(
+			invalidData.stderr.startsWith(
+				`fat-marker: ${badData}: variants: must have at least one variant`,
+			),
+			invalidData.stderr,
+		);
+
 		const transparent = tempFile(
 			"transparent-theme.json",
 			'{"background":"transparent"}',
@@ -333,6 +354,7 @@ describe("run, on help, version and usage errors", () => {
 			const { code, stdout, stderr } = await runCli([flag]);
 			assert.deepEqual({ code, stderr }, { code: 0, stderr: "" });
 			assert.match(stdout, /^Usage: fat-marker \[input\.json\|-\]/);
+			assert.ok(stdout.includes("[--theme theme.json]"));
 			for (const option of [
 				"-o, --output",
 				"--theme",
@@ -342,6 +364,7 @@ describe("run, on help, version and usage errors", () => {
 				assert.ok(stdout.includes(option), option);
 			}
 			assert.match(stdout, /\nExit codes:\n +0 .+\n +1 .+\n +2 .+\n$/);
+			assert.match(stdout, /1 {2}invalid JSON, data or theme/);
 		});
 	}
 

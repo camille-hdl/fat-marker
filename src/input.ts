@@ -1,5 +1,5 @@
 // from @camille-hdl/hill-chart@0.2.0, 738a559
-// functions FatMarkerError (renamed from HillChartError), readText (without its length bound), presentEntries, isObject, keyPath, codePoint, show and escapeUnsafeToPrint; the rest is new
+// functions FatMarkerError (renamed from HillChartError), readText (without its length bound), presentEntries, isObject, keyPath, codePoint, show and escapeUnsafeToPrint; readTheme (adapted: theme keys), readNumber, readSeed and readColor; the rest is new
 import { readFileSync } from "node:fs";
 
 export type Mark =
@@ -32,14 +32,34 @@ export type Theme = {
 	seed: number;
 };
 
-const THEME_KEYS = [
-	"background",
-	"ink",
-	"muted",
-	"accent",
-	"fontSize",
-	"seed",
-] as const;
+type ThemeKey = keyof Theme;
+
+const THEME_READERS: Record<
+	ThemeKey,
+	(theme: Theme, value: unknown, field: string) => void
+> = {
+	background: (theme, value, field) => {
+		theme.background =
+			value === "transparent"
+				? "transparent"
+				: readColor(value, field, ' or "transparent"');
+	},
+	ink: (theme, value, field) => {
+		theme.ink = readColor(value, field);
+	},
+	muted: (theme, value, field) => {
+		theme.muted = readColor(value, field);
+	},
+	accent: (theme, value, field) => {
+		theme.accent = readColor(value, field);
+	},
+	fontSize: (theme, value, field) => {
+		theme.fontSize = readNumber(value, field, 6, 96);
+	},
+	seed: (theme, value, field) => {
+		theme.seed = readSeed(value, field);
+	},
+};
 
 /** A normalized text, with the field it was read from. */
 export type Text = { text: string; field: string };
@@ -146,31 +166,14 @@ export function readTheme(theme: unknown): Theme {
 	if (theme === undefined) return read;
 	if (!isObject(theme)) throw new FatMarkerError("theme", "expected an object");
 	for (const [key, value] of presentEntries(theme)) {
-		if (!THEME_KEYS.includes(key as (typeof THEME_KEYS)[number])) {
+		if (!Object.hasOwn(THEME_READERS, key)) {
 			throw new FatMarkerError(
 				keyPath("theme", key),
-				`unknown key; a theme has only ${THEME_KEYS.map(show).join(", ")}`,
+				'unknown key; a theme has only "background", "ink", "muted", "accent", "fontSize" and "seed"',
 			);
 		}
 		const field = keyPath("theme", key);
-		if (key === "background" && value === "transparent") {
-			read.background = value;
-		} else if (
-			key === "background" ||
-			key === "ink" ||
-			key === "muted" ||
-			key === "accent"
-		) {
-			read[key] = readColor(
-				value,
-				field,
-				key === "background" ? ' or "transparent"' : "",
-			);
-		} else if (key === "fontSize") {
-			read.fontSize = readNumber(value, field, 6, 96);
-		} else {
-			read.seed = readSeed(value, field);
-		}
+		THEME_READERS[key as ThemeKey](read, value, field);
 	}
 	return read;
 }
@@ -262,7 +265,7 @@ function readPlaceOrRow(
 	depth: number,
 	placeNames: Map<string, string>,
 ): ModelPlace | ModelRow {
-	const kind = contentKind(content, field);
+	const kind = contentKind(content, field, depth);
 	if (kind === "affordance") {
 		throw new FatMarkerError(field, "an affordance must be inside a place");
 	}
@@ -274,7 +277,12 @@ function readPlaceOrRow(
 			(child, at, childDepth) =>
 				readPlaceOrRow(child, at, childDepth, placeNames),
 		);
-	return readPlace(content, field, depth, placeNames);
+	return readPlace(
+		content as Record<string, unknown>,
+		field,
+		depth,
+		placeNames,
+	);
 }
 
 /** Reads what a place, or a row inside a place, holds at `depth`: a place, an affordance or a row. */
@@ -284,7 +292,7 @@ function readPlaceContent(
 	depth: number,
 	placeNames: Map<string, string>,
 ): ModelContent {
-	const kind = contentKind(content, field);
+	const kind = contentKind(content, field, depth);
 	if (kind === "row")
 		return readRow(
 			content as Record<string, unknown>,
@@ -293,14 +301,24 @@ function readPlaceContent(
 			(child, at, childDepth) =>
 				readPlaceContent(child, at, childDepth, placeNames),
 		);
-	if (kind === "place") return readPlace(content, field, depth, placeNames);
-	return readAffordance(content, field);
+	if (kind === "place")
+		return readPlace(
+			content as Record<string, unknown>,
+			field,
+			depth,
+			placeNames,
+		);
+	return readAffordance(content as Record<string, unknown>, field);
 }
 
 type ContentKind = "place" | "affordance" | "row";
 
 /** Identifies one content key, preserving malformed and ambiguous content errors at the content path. */
-function contentKind(content: unknown, field: string): ContentKind {
+function contentKind(
+	content: unknown,
+	field: string,
+	depth: number,
+): ContentKind {
 	if (!isObject(content)) {
 		throw new FatMarkerError(
 			field,
@@ -319,6 +337,9 @@ function contentKind(content: unknown, field: string): ContentKind {
 			'expected a place, an affordance or a row (an object with a "place", "affordance" or "row" key)',
 		);
 	}
+	if (depth > MAX_DEPTH && kinds.some((kind) => kind !== "affordance")) {
+		checkDepth(field, depth);
+	}
 	if (kinds.length > 1) {
 		throw new FatMarkerError(
 			field,
@@ -330,17 +351,11 @@ function contentKind(content: unknown, field: string): ContentKind {
 
 /** Reads a place at `depth`, whose Wobble key `giveWobbleKeys` sets once its variant's name is known. */
 function readPlace(
-	place: unknown,
+	place: Record<string, unknown>,
 	field: string,
 	depth: number,
 	placeNames: Map<string, string>,
 ): ModelPlace {
-	if (!isObject(place)) {
-		throw new FatMarkerError(
-			field,
-			'expected a place (an object with a "place" key)',
-		);
-	}
 	checkDepth(field, depth);
 	let name: Text | undefined;
 	let contents: ModelContent[] = [];
@@ -354,7 +369,7 @@ function readPlace(
 					`duplicate place ${show(name.text)} (same as ${escapeUnsafeToPrint(first)})`,
 				);
 			}
-			placeNames.set(name.text, name.field);
+			placeNames.set(name.text, field);
 		} else if (key === "contains") {
 			contents = readContents(
 				value,
@@ -396,9 +411,6 @@ function readRow(
 			);
 		}
 	}
-	if (contents.length === 0) {
-		throw new FatMarkerError(`${field}.row`, "must not be empty");
-	}
 	return { kind: "row", contents };
 }
 
@@ -416,13 +428,10 @@ function checkDepth(field: string, depth: number): void {
 }
 
 /** Reads an affordance, whose Wobble key `giveWobbleKeys` sets once its variant's name is known. */
-function readAffordance(affordance: unknown, field: string): ModelAffordance {
-	if (!isObject(affordance)) {
-		throw new FatMarkerError(
-			field,
-			'expected an affordance (an object with an "affordance" key)',
-		);
-	}
+function readAffordance(
+	affordance: Record<string, unknown>,
+	field: string,
+): ModelAffordance {
 	let text: Text | undefined;
 	for (const [key, value] of presentEntries(affordance)) {
 		if (key === "affordance") {

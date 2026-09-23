@@ -173,6 +173,11 @@ describe("readSketch, on the depth of places and rows", () => {
 		assert.throws(() => readSketch(nestedDeep(21, place)), isDepthError);
 	});
 
+	test("rejects an ambiguous place at depth 21 before reading its keys", () => {
+		const content = { place: "P21", affordance: "Go" };
+		assert.throws(() => readSketch(nestedDeep(21, content)), isDepthError);
+	});
+
 	test("rejects places nested 10,000 deep with the same error, not a stack overflow", () => {
 		assert.throws(() => readSketch(nestedDeep(10_000)), isDepthError);
 	});
@@ -486,6 +491,35 @@ describe("readSketch, on the sketch and its variants", () => {
 		);
 	});
 
+	test("keeps unsafe characters out of structural validation messages", () => {
+		const cases: [() => unknown, string][] = [
+			[() => readSketch(withPlace({ place: "P", "\u001bx": true })), "\\u001b"],
+			[() => readTheme({ "\u001bx": true }), "\\u001b"],
+			[() => readTheme({ ink: "\u009b31m" }), "\\u009b31m"],
+			[
+				() =>
+					readSketch({
+						variants: [
+							{
+								variant: "A",
+								contains: [{ place: "P\u202e" }, { place: "P\u202e" }],
+							},
+						],
+					}),
+				"\\u202e",
+			],
+		];
+
+		for (const [read, escaped] of cases) {
+			assert.throws(read, (error) => {
+				assert.ok(error instanceof FatMarkerError);
+				assert.ok(error.message.includes(escaped), error.message);
+				assert.doesNotMatch(error.message, /[\p{C}\u2028\u2029]/u);
+				return true;
+			});
+		}
+	});
+
 	test("rejects duplicate normalized place names within a variant and allows them across variants", () => {
 		assert.throws(
 			() =>
@@ -503,7 +537,7 @@ describe("readSketch, on the sketch and its variants", () => {
 			(error) =>
 				error instanceof FatMarkerError &&
 				error.message ===
-					'variants[0].contains[0].contains[0].row[1].place: duplicate place "Setup" (same as variants[0].contains[0].place)',
+					'variants[0].contains[0].contains[0].row[1].place: duplicate place "Setup" (same as variants[0].contains[0])',
 		);
 		assert.doesNotThrow(() =>
 			readSketch({
@@ -589,5 +623,12 @@ describe("readTheme", () => {
 					error.message.includes(message),
 			);
 		}
+		assert.throws(
+			() => readTheme({ width: 960 }),
+			(error) =>
+				error instanceof FatMarkerError &&
+				error.message ===
+					'theme.width: unknown key; a theme has only "background", "ink", "muted", "accent", "fontSize" and "seed"',
+		);
 	});
 });
