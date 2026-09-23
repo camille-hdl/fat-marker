@@ -83,14 +83,14 @@ export function routeArrows(
 		return { x: box.x + box.width, y: box.y + box.height / 2 };
 	});
 	const areaRight = column.x + column.width + corridor;
-	const bands = bandsOf(variant, hemmedOf(variant));
+	const anchors = anchorsOf(variant, hemmedOf(variant));
 	const boxOf = (content: ModelPlace | ModelAffordance) =>
 		content.kind === "place"
 			? (places.get(content) as LaidPlace).frame
 			: (boxes.get(content) as Box);
 	const arrivals = spreadArrivals(
 		variant,
-		bands,
+		anchors,
 		routes,
 		starts,
 		places,
@@ -112,7 +112,7 @@ export function routeArrows(
 			column.x +
 			column.width +
 			(CORRIDOR_GAP + (lane++ + 0.5) * LANE_WIDTH) * em;
-		const route = bands.has(arrow.to) ? throughLaneFlat : throughLane;
+		const route = anchors.has(arrow.to) ? throughLaneFlat : throughLane;
 		return { arrow, side, path: route(start, x, end, TURN_RADIUS * em) };
 	});
 	return { arrows, corridor };
@@ -143,10 +143,10 @@ export function rowBands(
 	variant: ModelVariant,
 	em: number,
 ): Map<ModelRow, number> {
-	const bands = bandsOf(variant, hemmedOf(variant));
+	const anchors = anchorsOf(variant, hemmedOf(variant));
 	const arrivals = new Map<ModelRow, number>();
 	for (const [i, { side }] of routesOf(variant).entries()) {
-		const row = bands.get(variant.arrows[i].to);
+		const row = anchors.get(variant.arrows[i].to);
 		if (side !== "right" || row?.kind !== "row") continue;
 		arrivals.set(row, (arrivals.get(row) ?? 0) + 1);
 	}
@@ -236,25 +236,25 @@ function hemmedOf(variant: ModelVariant): Set<ModelPlace> {
 }
 
 /**
- * Where each `hemmed` place of `variant` keeps the arrivals into its right edge: in the band at the bottom of the
- * outermost row that holds it, directly or through its rows, whose height it shares; for a place nested in a place of
- * a row, at its own bottom.
+ * Where each `hemmed` place of `variant` anchors the arrivals into its right edge: in the band of the outermost row
+ * that holds it, directly or through its rows, whose height it shares; itself, at its own bottom, for a place nested in
+ * a place of a row.
  */
-function bandsOf(
+function anchorsOf(
 	variant: ModelVariant,
 	hemmed: Set<ModelPlace>,
 ): Map<ModelPlace, ModelRow | ModelPlace> {
-	const bands = new Map<ModelPlace, ModelRow | ModelPlace>();
+	const anchors = new Map<ModelPlace, ModelRow | ModelPlace>();
 	const visit = (contents: ModelContent[], row?: ModelRow) => {
 		for (const content of contents) {
 			if (content.kind === "row") visit(content.contents, row ?? content);
 			if (content.kind !== "place") continue;
-			if (hemmed.has(content)) bands.set(content, row ?? content);
+			if (hemmed.has(content)) anchors.set(content, row ?? content);
 			visit(content.contents);
 		}
 	};
 	visit(variant.contents);
-	return bands;
+	return anchors;
 }
 
 /**
@@ -263,15 +263,15 @@ function bandsOf(
  * the other arrivals on it go at the `topSlots` left of those lanes. The arrivals on a left edge are at the heights of
  * their starts, as near as `levelHeights` allows. Those on a right edge go down every ARRIVAL_STEP from the middle of
  * the name's first line, or evenly down to LOW above the bottom corner of the frame when that would pass it. Those on
- * the right edges of the hemmed places of one of the `bands` go up instead, every ARRIVAL_STEP from LOW above its
- * bottom, or evenly up to the middle of the name's first line: the rightmost place's lowest, each place further left
- * above it, so that an arrow into a place passes above the heads of the places on its right. They go to the arrows of
- * the edge in an order that keeps them from crossing before their heads. Each arrival is ENTRY_DEPTH inside the
- * frame, past its edge.
+ * the right edges of the hemmed places of one anchor in `anchors`, a row's band or a place, go up instead, every
+ * ARRIVAL_STEP from LOW above its bottom, or evenly up to the middle of the name's first line: the rightmost place's
+ * lowest, each place further left above it, so that an arrow into a place passes above the heads of the places on its
+ * right. They go to the arrows of the edge in an order that keeps them from crossing before their heads. Each arrival
+ * is ENTRY_DEPTH inside the frame, past its edge.
  */
 function spreadArrivals(
 	variant: ModelVariant,
-	bands: Map<ModelPlace, ModelRow | ModelPlace>,
+	anchors: Map<ModelPlace, ModelRow | ModelPlace>,
 	routes: Route[],
 	starts: Point[],
 	places: Map<ModelPlace, LaidPlace>,
@@ -293,7 +293,7 @@ function spreadArrivals(
 	const arrivals: Point[] = [];
 	const [depth, step] = [ENTRY_DEPTH * em, ARRIVAL_STEP * em];
 	const laidOf = (place: ModelPlace) => places.get(place) as LaidPlace;
-	/** The right edges spread together: those of the places of one band, or that of a place alone. */
+	/** The right edges spread together: those of the places of one anchor, a row's band or a place alone. */
 	const onRight = new Map<
 		ModelRow | ModelPlace,
 		{ to: ModelPlace; arrows: number[] }[]
@@ -309,10 +309,10 @@ function spreadArrivals(
 			: nestedOrder(arrows, xs, starts, into);
 	for (const { to, side, arrows } of edges.values()) {
 		if (side === "right") {
-			const band = bands.get(to) ?? to;
-			const together = onRight.get(band) ?? [];
+			const anchor = anchors.get(to) ?? to;
+			const together = onRight.get(anchor) ?? [];
 			together.push({ to, arrows });
-			onRight.set(band, together);
+			onRight.set(anchor, together);
 			continue;
 		}
 		const { frame } = laidOf(to);
@@ -378,7 +378,9 @@ function spreadArrivals(
 		const [top, lowest] = sideSpan(laidOf(edges[0].to), em);
 		const count = edges.reduce((sum, { arrows }) => sum + arrows.length, 0);
 		const spread = count > 1 ? Math.min(step, (lowest - top) / (count - 1)) : 0;
-		const first = bands.has(edges[0].to) ? lowest - (count - 1) * spread : top;
+		const first = anchors.has(edges[0].to)
+			? lowest - (count - 1) * spread
+			: top;
 		let rank = 0;
 		for (const { to, arrows } of edges) {
 			const { frame } = laidOf(to);
