@@ -1,5 +1,5 @@
 // from @camille-hdl/hill-chart@0.2.0, 738a559
-// functions tempFile, runCliBytes, runCli and paddedSample (renamed paddedMinimal); the rest is new
+// adapted: hill-chart's CLI tests for what this CLI keeps (SVG, stdin, -o, limits, usage errors and bin); the rest is new
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import {

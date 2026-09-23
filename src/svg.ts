@@ -12,7 +12,7 @@ const BUTTON_RADIUS = 0.6;
 
 /** Serializes a layout as a standalone, accessible SVG document. */
 export function toSvg(layout: Layout, theme: Theme): string {
-	const { viewBox, title } = layout;
+	const { viewBox, title, subtitle } = layout;
 	const [x, y, width, height] = [
 		viewBox.x,
 		viewBox.y,
@@ -23,7 +23,13 @@ export function toSvg(layout: Layout, theme: Theme): string {
 		`<svg xmlns="http://www.w3.org/2000/svg" viewBox="${x} ${y} ${width} ${height}" width="${width}" height="${height}" role="img">`,
 		`<title>${escapeXml(title?.lines.join(" ") ?? "Fat marker sketch")}</title>`,
 		`<desc>${escapeXml(describe(layout))}</desc>`,
-		`<rect x="${x}" y="${y}" width="${width}" height="${height}" fill="${theme.background}"/>`,
+		...(theme.background === "transparent"
+			? []
+			: [
+					`<rect x="${x}" y="${y}" width="${width}" height="${height}" fill="${theme.background}"/>`,
+				]),
+		...(title ? [text(title, theme.ink)] : []),
+		...(subtitle ? [text(subtitle, theme.muted)] : []),
 		...layout.variants.map(({ heading, items }) =>
 			[
 				'<g class="variant">',
@@ -46,7 +52,7 @@ export function toSvg(layout: Layout, theme: Theme): string {
  * affordances in document order, variants apart by an empty line.
  */
 function describe(layout: Layout): string {
-	return layout.variants
+	const variants = layout.variants
 		.map(({ variant, items }) =>
 			[
 				variant.name.text,
@@ -58,6 +64,9 @@ function describe(layout: Layout): string {
 			].join("\n"),
 		)
 		.join("\n\n");
+	return [layout.subtitle?.lines.join(" "), variants]
+		.filter((part) => part !== undefined && part !== "")
+		.join("\n");
 }
 
 /** A place's frame, in four strokes, and its name. */

@@ -57,6 +57,17 @@ const withAffordance = (affordance: unknown) =>
 	withPlace({ place: "Plot list", contains: [affordance] });
 
 describe("readSketch, on texts", () => {
+	test("keeps normalized title and subtitle with their fields and no Wobble keys", () => {
+		const model = readSketch({
+			title: "  Garden\nbooking ",
+			subtitle: "  Week   3 ",
+			...minimal,
+		});
+		assert.deepEqual(model.title, { text: "Garden booking", field: "title" });
+		assert.deepEqual(model.subtitle, { text: "Week 3", field: "subtitle" });
+		assert.deepEqual(Object.keys(model), ["title", "subtitle", "variants"]);
+	});
+
 	test("normalizes every text: NFC, runs of whitespace as one space, trimmed", () => {
 		const model = readSketch(
 			withVariant({
@@ -90,14 +101,8 @@ describe("readSketch, on data outside this version", () => {
 	const variant = minimal.variants[0];
 	const invalid: [string, unknown, string][] = [
 		["a non-object", [], "(root)"],
-		["a title", { title: "Garden", ...minimal }, "title"],
-		["no variants", {}, "variants"],
-		["no variant", { variants: [] }, "variants"],
-		[
-			"a second variant",
-			{ variants: [variant, { ...variant, variant: "B" }] },
-			"variants[1]",
-		],
+		["missing variants", {}, "variants"],
+		["an empty variants array", { variants: [] }, "variants"],
 		[
 			"an unknown key on a variant",
 			withVariant({ ...variant, name: "A" }),
@@ -146,6 +151,49 @@ describe("readSketch, on data outside this version", () => {
 			);
 		});
 	}
+
+	test("rejects a blank subtitle with the prescribed message", () => {
+		assert.throws(
+			() => readSketch({ subtitle: "  ", ...minimal }),
+			(error) =>
+				error instanceof FatMarkerError &&
+				error.message === "subtitle: must not be empty (omit it instead)",
+		);
+	});
+
+	test("rejects a blank title with the prescribed message", () => {
+		assert.throws(
+			() => readSketch({ title: "  ", ...minimal }),
+			(error) =>
+				error instanceof FatMarkerError &&
+				error.message === "title: must not be empty (omit it instead)",
+		);
+	});
+
+	test("requires at least one variant", () => {
+		assert.throws(
+			() => readSketch({ variants: [] }),
+			(error) =>
+				error instanceof FatMarkerError &&
+				error.message === "variants: must have at least one variant",
+		);
+	});
+
+	test("rejects normalized duplicate variant names with the original index", () => {
+		assert.throws(
+			() =>
+				readSketch({
+					variants: [
+						minimal.variants[0],
+						{ ...minimal.variants[0], variant: " A · Plot list " },
+					],
+				}),
+			(error) =>
+				error instanceof FatMarkerError &&
+				error.message ===
+					'variants[1].variant: duplicate variant "A · Plot list" (same as variants[0])',
+		);
+	});
 });
 
 describe("readTheme", () => {

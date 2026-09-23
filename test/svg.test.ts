@@ -1,5 +1,5 @@
 // from @camille-hdl/hill-chart@0.2.0, 738a559
-// functions fixture, desc and title; the rest is new
+// functions fixture, desc, title, the snapshot loop and the svg-element test; the rest is new
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { describe, test } from "node:test";
@@ -40,7 +40,7 @@ function sketch(
 	};
 }
 
-const fixtures = ["minimal"];
+const fixtures = ["minimal", "title-subtitle"];
 
 describe("renderSvg", () => {
 	for (const name of fixtures) {
@@ -63,6 +63,26 @@ describe("renderSvg", () => {
 
 	test('titles a sketch without a title "Fat marker sketch"', () => {
 		assert.equal(title(renderSvg(fixture("minimal"))), "Fat marker sketch");
+	});
+
+	test("uses the sketch title and describes the subtitle before both variants", () => {
+		const svg = renderSvg(fixture("title-subtitle"));
+		assert.equal(title(svg), "Plot booking");
+		assert.equal(
+			desc(svg),
+			[
+				"Week 3 · Shape review",
+				"A · Separate booking screen",
+				"- place: Plot list",
+				"- affordance: Book a plot",
+				"",
+				"B · Inline booking",
+				"- place: Plot list",
+				"- affordance: Choose a plot",
+			].join("\n"),
+		);
+		assert.equal((svg.match(/<g class="variant">/g) ?? []).length, 2);
+		assert.ok(svg.indexOf('fill="#262a33"') < svg.indexOf('fill="#6b6259"'));
 	});
 
 	test("describes the variant, then its places and affordances in document order", () => {

@@ -34,6 +34,7 @@ function fixture(name: string): Sketch {
 
 const sketches: Record<string, Sketch> = {
 	minimal: fixture("minimal"),
+	"title and subtitle": fixture("title-subtitle"),
 	"several places and buttons": {
 		variants: [
 			{
@@ -63,7 +64,7 @@ const sketches: Record<string, Sketch> = {
 						contains: [
 							{
 								affordance:
-									"Share this plot with a neighbour who waters it while you are away for the summer holidays",
+									"Share this plot with a neighbour who waters it while you are away for the summer holidays.",
 							},
 							{ affordance: "Supercalifragilisticexpialidocious" },
 							{ affordance: "Go" },
@@ -132,6 +133,18 @@ for (const [name, sketch] of Object.entries(sketches)) {
 			);
 		});
 
+		test("lays columns left to right with their tops at zero (invariant 2)", () => {
+			for (let i = 0; i < laid.variants.length; i++) {
+				assert.equal(laid.variants[i].column.y, 0);
+				if (i > 0) {
+					assert.ok(
+						laid.variants[i - 1].area.x + laid.variants[i - 1].area.width <
+							laid.variants[i].area.x,
+					);
+				}
+			}
+		});
+
 		test("keeps every item inside its place, and every place inside its column (invariant 1)", () => {
 			for (const variant of laid.variants) {
 				for (const item of variant.items) {
@@ -175,6 +188,18 @@ for (const [name, sketch] of Object.entries(sketches)) {
 			}
 		});
 
+		test("keeps the headings above variant names and columns (invariant 3)", () => {
+			const topHeading = laid.subtitle ?? laid.title;
+			if (topHeading) {
+				for (const { heading } of laid.variants) {
+					assert.ok(bottom(topHeading.box) + GAP <= heading.box.y);
+				}
+			}
+			if (laid.title && laid.subtitle) {
+				assert.ok(bottom(laid.title.box) + GAP <= laid.subtitle.box.y);
+			}
+		});
+
 		test("wraps labels at 12 em, except a single word, and keeps every text block inside its box (invariant 4)", () => {
 			for (const { block, carrier } of textBlocks(laid)) {
 				assert.ok(inside(block.box, carrier), block.lines.join(" "));
@@ -209,6 +234,9 @@ for (const [name, sketch] of Object.entries(sketches)) {
 				assert.ok(inside(variant.column, variant.area));
 				assert.ok(inside(variant.heading.box, variant.area));
 			}
+			for (const block of [laid.title, laid.subtitle]) {
+				if (block) assert.ok(inside(block.box, viewBox, MARGIN));
+			}
 		});
 
 		test("gives the same layout for the same input (invariant 9)", () => {
@@ -242,4 +270,58 @@ describe("layout of buttons", () => {
 			if (item.kind === "place") assert.equal(item.frame.width, column.width);
 		}
 	});
+});
+
+test("variant independence: changing variant A only translates variant B horizontally (invariant 7)", () => {
+	const original = fixture("title-subtitle");
+	const before = laidOut(original);
+	const changed = laidOut({
+		...original,
+		variants: [
+			{
+				...original.variants[0],
+				contains: [{ place: "A much wider plot list" }],
+			},
+			original.variants[1],
+		],
+	});
+	const beforeB = before.variants[1];
+	const afterB = changed.variants[1];
+	const shift = afterB.column.x - beforeB.column.x;
+	assert.ok(shift > 0);
+	const localGeometry = (variant: Layout["variants"][number]) =>
+		variant.items.map((item) =>
+			item.kind === "place"
+				? {
+						kind: item.kind,
+						frame: { ...item.frame, x: item.frame.x - variant.column.x },
+						name: {
+							x: item.name.x - variant.column.x,
+							baseline: item.name.baseline,
+							box: { ...item.name.box, x: item.name.box.x - variant.column.x },
+						},
+					}
+				: {
+						kind: item.kind,
+						box: { ...item.box, x: item.box.x - variant.column.x },
+						label: item.label && {
+							x: item.label.x - variant.column.x,
+							baseline: item.label.baseline,
+							box: {
+								...item.label.box,
+								x: item.label.box.x - variant.column.x,
+							},
+						},
+					},
+		);
+	const rounded = (value: unknown) =>
+		JSON.parse(
+			JSON.stringify(value, (_key, item: unknown) =>
+				typeof item === "number" ? Number(item.toFixed(8)) : item,
+			),
+		);
+	assert.deepEqual(
+		rounded(localGeometry(beforeB)),
+		rounded(localGeometry(afterB)),
+	);
 });

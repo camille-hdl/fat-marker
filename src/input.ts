@@ -98,20 +98,34 @@ export function readSketch(data: unknown): Model {
 		);
 	}
 	let variants: ModelVariant[] | undefined;
+	let title: Text | undefined;
+	let subtitle: Text | undefined;
 	for (const [key, value] of presentEntries(data)) {
 		if (key === "variants") {
 			variants = readVariants(value);
+		} else if (key === "title") {
+			title = readNormalized(
+				value,
+				"title",
+				"must not be empty (omit it instead)",
+			);
+		} else if (key === "subtitle") {
+			subtitle = readNormalized(
+				value,
+				"subtitle",
+				"must not be empty (omit it instead)",
+			);
 		} else {
 			throw new FatMarkerError(
 				keyPath("", key),
-				'unknown key; a fat marker sketch has only "variants"',
+				'unknown key; a fat marker sketch has only "title", "subtitle" and "variants"',
 			);
 		}
 	}
 	if (variants === undefined) {
 		throw new FatMarkerError("variants", "required");
 	}
-	return { variants };
+	return { ...(title && { title }), ...(subtitle && { subtitle }), variants };
 }
 
 /** Returns the theme to draw with: the default theme when `theme` is undefined. */
@@ -129,16 +143,18 @@ function readVariants(variants: unknown): ModelVariant[] {
 	if (variants.length === 0) {
 		throw new FatMarkerError("variants", "must have at least one variant");
 	}
-	if (variants.length > 1) {
-		throw new FatMarkerError(
-			"variants[1]",
-			"a fat marker sketch has only one variant for now",
-		);
-	}
-	return [readVariant(variants[0], "variants[0]")];
+	const names = new Map<string, number>();
+	return Array.from(variants, (variant, i) =>
+		readVariant(variant, `variants[${i}]`, i, names),
+	);
 }
 
-function readVariant(variant: unknown, field: string): ModelVariant {
+function readVariant(
+	variant: unknown,
+	field: string,
+	index: number,
+	names: Map<string, number>,
+): ModelVariant {
 	if (!isObject(variant)) {
 		throw new FatMarkerError(
 			field,
@@ -150,6 +166,14 @@ function readVariant(variant: unknown, field: string): ModelVariant {
 	for (const [key, value] of presentEntries(variant)) {
 		if (key === "variant") {
 			name = readNormalized(value, `${field}.variant`);
+			const firstIndex = names.get(name.text);
+			if (firstIndex !== undefined) {
+				throw new FatMarkerError(
+					name.field,
+					`duplicate variant ${show(name.text)} (same as variants[${firstIndex}])`,
+				);
+			}
+			names.set(name.text, index);
 		} else if (key === "contains") {
 			contents = readContents(value, `${field}.contains`, readPlace);
 		} else {
@@ -262,8 +286,12 @@ function giveWobbleKeys(variant: ModelVariant): void {
 }
 
 /** Reads a non-empty text at `field`, normalized. */
-function readNormalized(text: unknown, field: string): Text {
-	return { text: readText(text, field, "must not be empty"), field };
+function readNormalized(
+	text: unknown,
+	field: string,
+	whenEmpty = "must not be empty",
+): Text {
+	return { text: readText(text, field, whenEmpty), field };
 }
 
 /** Reads text as it will be drawn: in NFC, every run of whitespace as one space, trimmed, and not empty. */

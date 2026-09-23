@@ -1,0 +1,21 @@
+{
+	"title": "Plot booking",
+	"subtitle": "Week 3 · Shape review",
+	"variants": [
+		{
+			"variant": "A · Separate booking screen",
+			"contains": [
+				{ "place": "Plot list", "contains": [{ "affordance": "Book a plot" }] }
+			]
+		},
+		{
+			"variant": "B · Inline booking",
+			"contains": [
+				{
+					"place": "Plot list",
+					"contains": [{ "affordance": "Choose a plot" }]
+				}
+			]
+		}
+	]
+}

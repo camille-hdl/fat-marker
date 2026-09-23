@@ -68,11 +68,16 @@ const HALF_CAP_HEIGHT = 0.35;
 
 // Lengths in em, relative to theme.fontSize.
 const VARIANT_NAME_SIZE = 1.4;
+const TITLE_SIZE = 1.6;
+const SUBTITLE_SIZE = 1;
 const PLACE_NAME_SIZE = 1.1;
 /** Button labels wrap at this width. */
 const LABEL_WRAP = 12;
 /** Between a variant's name and its column. */
 const HEADING_GAP = 0.8;
+const VARIANT_GAP = 2;
+const SKETCH_HEADING_GAP = 0.7;
+const SKETCH_WRAP_MIN = 24;
 /** Between the contents of a column. */
 const CONTENT_GAP = 1;
 /** Inside a place's frame, around its name and contents. */
@@ -97,11 +102,48 @@ type MeasuredPlace = {
  */
 export function layout(model: Model, theme: Theme): Layout {
 	const em = theme.fontSize;
-	const variants = model.variants.map((variant) => placeVariant(variant, em));
+	let x = 0;
+	const variants = model.variants.map((variant) => {
+		const placed = placeVariant(variant, em);
+		const translated = moveVariant(placed, x);
+		x += placed.area.width + VARIANT_GAP * em;
+		return translated;
+	});
+	const sketchWidth = x - VARIANT_GAP * em;
+	const widestName = smallest(variants.map(({ heading }) => heading.box.y));
+	let headerBottom = widestName - SKETCH_HEADING_GAP * em;
+	const headerWidth = Math.max(sketchWidth, SKETCH_WRAP_MIN * em);
+	const center = sketchWidth / 2;
+	const subtitle = model.subtitle
+		? sketchText(
+				model.subtitle,
+				SUBTITLE_SIZE * em,
+				600,
+				headerWidth,
+				center,
+				headerBottom,
+			)
+		: undefined;
+	if (subtitle) headerBottom = subtitle.box.y - SKETCH_HEADING_GAP * em;
+	const title = model.title
+		? sketchText(
+				model.title,
+				TITLE_SIZE * em,
+				700,
+				headerWidth,
+				center,
+				headerBottom,
+			)
+		: undefined;
+	const visible = [
+		...variants.map((variant) => variant.area),
+		...(title ? [title.box] : []),
+		...(subtitle ? [subtitle.box] : []),
+	];
 	return {
-		viewBox: roundOutward(
-			grow(boundingBox(variants.map((variant) => variant.area)), MARGIN * em),
-		),
+		viewBox: roundOutward(grow(boundingBox(visible), MARGIN * em)),
+		title,
+		subtitle,
 		variants,
 	};
 }
@@ -119,13 +161,14 @@ function placeVariant(variant: ModelVariant, em: number): LaidVariant {
 	}
 	const column = { x: 0, y: 0, width, height: y - CONTENT_GAP * em };
 	const size = VARIANT_NAME_SIZE * em;
+	const lines = wrap(variant.name.text, Math.max(width, 12 * em), 700, size);
 	const heading = textBlock(
-		[variant.name.text],
+		lines,
 		700,
 		size,
 		"start",
 		0,
-		-HEADING_GAP * em - (LINE_HEIGHT * size) / 2,
+		-HEADING_GAP * em - (lines.length * LINE_HEIGHT * size) / 2,
 		variant.name.field,
 	);
 	return {
@@ -135,6 +178,48 @@ function placeVariant(variant: ModelVariant, em: number): LaidVariant {
 		area: boundingBox([column, heading.box]),
 		items,
 		arrows: [],
+	};
+}
+
+/** Places an optional sketch heading, centered and bottom-aligned at `bottom`. */
+function sketchText(
+	text: { text: string; field: string },
+	size: number,
+	weight: Weight,
+	width: number,
+	center: number,
+	bottom: number,
+): TextBlock {
+	const lines = wrap(text.text, width, weight, size);
+	return textBlock(
+		lines,
+		weight,
+		size,
+		"middle",
+		center,
+		bottom - (lines.length * LINE_HEIGHT * size) / 2,
+		text.field,
+	);
+}
+
+/** Moves one complete variant horizontally without changing any of its local geometry. */
+function moveVariant(variant: LaidVariant, x: number): LaidVariant {
+	if (x === 0) return variant;
+	const dx = x - variant.column.x;
+	return {
+		...variant,
+		heading: moveBy(variant.heading, dx, 0),
+		column: { ...variant.column, x: variant.column.x + dx },
+		area: { ...variant.area, x: variant.area.x + dx },
+		items: variant.items.map((item) =>
+			item.kind === "place"
+				? {
+						...item,
+						frame: { ...item.frame, x: item.frame.x + dx },
+						name: moveBy(item.name, dx, 0),
+					}
+				: moveAffordance(item, item.box.x + dx, item.box.y),
+		),
 	};
 }
 
