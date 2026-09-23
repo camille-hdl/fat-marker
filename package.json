@@ -41,5 +41,8 @@
 		"@biomejs/biome": "^2.5.14",
 		"@types/node": "^22.20.4",
 		"typescript": "^7.0.2"
+	},
+	"dependencies": {
+		"@resvg/resvg-wasm": "2.6.2"
 	}
 }

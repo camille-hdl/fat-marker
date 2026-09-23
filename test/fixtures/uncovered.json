@@ -1,0 +1,14 @@
+{
+	"title": "Reaction notes",
+	"variants": [
+		{
+			"variant": "Inbox",
+			"contains": [
+				{
+					"place": "Messages",
+					"contains": [{ "affordance": "Open reaction 👍" }]
+				}
+			]
+		}
+	]
+}

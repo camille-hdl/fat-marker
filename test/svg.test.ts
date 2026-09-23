@@ -124,6 +124,7 @@ const fixtures = [
 	"copy-scribble",
 	"arrows",
 	"sample",
+	"uncovered",
 ];
 
 /** The `<g class="arrow">` groups of `svg`, in drawing order: at least one. */

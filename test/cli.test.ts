@@ -17,7 +17,7 @@ import { PassThrough, Readable } from "node:stream";
 import { after, describe, test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { run } from "../src/cli.ts";
-import { renderSvg } from "../src/index.ts";
+import { renderPng, renderSvg } from "../src/index.ts";
 
 const minimalPath = fileURLToPath(
 	new URL("fixtures/minimal.json", import.meta.url),
@@ -111,6 +111,117 @@ describe("run", () => {
 		const { code } = await runCli([minimalPath, "-o", output]);
 		assert.equal(code, 0);
 		assert.equal(readFileSync(output, "utf8"), minimalSvg);
+	});
+
+	test("writes PNG when selected by the output extension", async () => {
+		const output = join(dir, "sketch.png");
+		const { code, stdout, stderr } = await runCliBytes([
+			minimalPath,
+			"-o",
+			output,
+		]);
+		assert.equal(code, 0);
+		assert.deepEqual(stdout, Buffer.alloc(0));
+		assert.deepEqual(stderr, Buffer.alloc(0));
+		assert.deepEqual(
+			readFileSync(output),
+			Buffer.from(await renderPng(JSON.parse(minimalJson))),
+		);
+	});
+
+	test("writes PNG to redirected stdout when --format is png", async () => {
+		const { code, stdout, stderr } = await runCliBytes([
+			minimalPath,
+			"--format",
+			"png",
+		]);
+		assert.equal(code, 0);
+		assert.deepEqual(stderr, Buffer.alloc(0));
+		assert.deepEqual(
+			stdout,
+			Buffer.from(await renderPng(JSON.parse(minimalJson))),
+		);
+	});
+
+	test("writes SVG when selected by --format", async () => {
+		assert.deepEqual(await runCli([minimalPath, "--format", "svg"]), {
+			code: 0,
+			stdout: minimalSvg,
+			stderr: "",
+		});
+	});
+
+	test("accepts an uppercase PNG extension", async () => {
+		const output = join(dir, "SKETCH.PNG");
+		assert.equal((await runCli([minimalPath, "-o", output])).code, 0);
+		assert.deepEqual(
+			readFileSync(output),
+			Buffer.from(await renderPng(JSON.parse(minimalJson))),
+		);
+	});
+
+	test("rejects unsupported and contradictory output formats as usage errors", async () => {
+		for (const args of [
+			[minimalPath, "-o", join(dir, "sketch.jpg")],
+			[minimalPath, "--format", "gif"],
+			[minimalPath, "--format", "png", "-o", join(dir, "sketch.svg")],
+		]) {
+			const { code, stdout, stderr } = await runCli(args);
+			assert.equal(code, 2, stderr);
+			assert.equal(stdout, "");
+			assert.match(stderr, /^fat-marker: [\s\S]*\nTry fat-marker --help\n$/);
+		}
+	});
+
+	test("refuses to write PNG to a terminal", async () => {
+		assert.deepEqual(
+			await runCli([minimalPath, "--format", "png"], "", { stdout: true }),
+			{
+				code: 2,
+				stdout: "",
+				stderr:
+					"fat-marker: refusing to write PNG to a terminal; use -o sketch.png or redirect\n",
+			},
+		);
+	});
+
+	test("reports uncovered PNG text as a sketch error", async () => {
+		const path = fileURLToPath(
+			new URL("fixtures/uncovered.json", import.meta.url),
+		);
+		const svg = await runCli([path]);
+		assert.equal(svg.code, 0);
+		assert.match(svg.stdout, /Open reaction 👍/);
+
+		const { code, stderr } = await runCli([path, "--format", "png"]);
+		assert.equal(code, 1);
+		assert.match(stderr, /characters not in the embedded font/);
+		assert.match(stderr, /U\+1F44D/);
+		assert.match(stderr, /write it as a word/);
+	});
+
+	test("reports an oversized PNG with dimensions and SVG suggestion", async () => {
+		const data = tempFile(
+			"oversized-title.json",
+			JSON.stringify({
+				title: "W".repeat(300),
+				variants: [{ variant: "A", contains: [{ place: "P" }] }],
+			}),
+		);
+		const theme = tempFile("large-font.json", '{"fontSize":96}');
+		const { code, stderr } = await runCli([
+			data,
+			"--theme",
+			theme,
+			"--format",
+			"png",
+		]);
+		assert.equal(code, 1);
+		assert.match(stderr, /\(root\): PNG of \d+ × \d+ pixels/);
+		assert.match(
+			stderr,
+			/over the 16384-pixel limit on a side; render SVG instead/,
+		);
 	});
 
 	test("exits 1 on invalid JSON from stdin", async () => {
@@ -391,7 +502,6 @@ describe("run, on help, version and usage errors", () => {
 		["an unknown option", ["--nope"]],
 		["a missing option value", [minimalPath, "-o"]],
 		["a second positional argument", ["a.json", "b.json"]],
-		["--format, not yet an option", [minimalPath, "--format", "svg"]],
 	];
 
 	for (const [name, args] of usageErrors) {
@@ -402,13 +512,13 @@ describe("run, on help, version and usage errors", () => {
 		});
 	}
 
-	for (const extension of [".png", ".txt", ""]) {
+	for (const extension of [".txt", ""]) {
 		test(`exits 2 on an -o file ending in "${extension}", pointing to --help, and writes nothing`, async () => {
 			const output = join(dir, `sketch${extension}`);
 			assert.deepEqual(await runCli([minimalPath, "-o", output]), {
 				code: 2,
 				stdout: "",
-				stderr: `fat-marker: cannot tell the format of ${output}; name it .svg\nTry fat-marker --help\n`,
+				stderr: `fat-marker: cannot tell the format of ${output}; name it .svg or .png\nTry fat-marker --help\n`,
 			});
 			assert.equal(existsSync(output), false);
 		});

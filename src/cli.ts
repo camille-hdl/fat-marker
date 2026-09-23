@@ -4,7 +4,13 @@ import { createReadStream } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
 import { extname } from "node:path";
 import { getSystemErrorMessage, parseArgs } from "node:util";
-import { FatMarkerError, renderSvg, type Sketch, type Theme } from "./index.ts";
+import {
+	FatMarkerError,
+	renderPng,
+	renderSvg,
+	type Sketch,
+	type Theme,
+} from "./index.ts";
 import { escapeUnsafeToPrint } from "./input.ts";
 
 export type Io = {
@@ -13,13 +19,14 @@ export type Io = {
 	stderr: NodeJS.WritableStream;
 };
 
-const help = `Usage: fat-marker [input.json|-] [--theme theme.json] [-o out.svg]
+const help = `Usage: fat-marker [input.json|-] [--theme theme.json] [-o out.svg|out.png] [--format svg|png]
 
-Draws a fat marker sketch (Shape Up, chapter 4) as SVG from a JSON description of its
+Draws a fat marker sketch (Shape Up, chapter 4) as SVG or PNG from a JSON description of its
 variants, places and affordances. Reads stdin when given no input file, or "-".
 
 Options:
-  -o, --output <file>  write to <file> instead of stdout, as SVG
+  -o, --output <file>  write to <file> instead of stdout; format follows .svg or .png
+      --format <fmt>   svg (default) or png; PNG goes to stdout only when it is not a terminal
       --theme <file>   apply a partial theme read from a JSON file
   -h, --help           print this help
       --version        print the version
@@ -27,10 +34,12 @@ Options:
 Examples:
   fat-marker sketch.json > sketch.svg
   cat sketch.json | fat-marker -o sketch.svg
+  fat-marker sketch.json -o sketch.png
+  fat-marker sketch.json --format png > sketch.png
 
 Exit codes:
   0  success
-  1  invalid JSON, data or theme, or an input over 1 MiB; the message names the file, and the field when there is one
+  1  invalid JSON, data or theme, an input over 1 MiB, or a PNG that cannot be drawn; the message names the file and field
   2  usage error, or a file that cannot be read or written
 `;
 
@@ -56,7 +65,13 @@ export async function run(args: string[], io: Io): Promise<number> {
 			io.stdout.write(`${await packageVersion()}\n`);
 			return 0;
 		}
-		if (values.output !== undefined) checkFormat(values.output);
+		const format = outputFormat(values.output, values.format);
+		if (format === "png" && values.output === undefined && io.stdout.isTTY) {
+			throw new Failure(
+				"refusing to write PNG to a terminal; use -o sketch.png or redirect",
+				2,
+			);
+		}
 		if (positionals.length === 0 && io.stdin.isTTY) {
 			// Waiting for someone to type JSON would look like a hang.
 			io.stderr.write(help);
@@ -70,9 +85,10 @@ export async function run(args: string[], io: Io): Promise<number> {
 			themeSource === undefined
 				? undefined
 				: parseJson(await readFileText(themeSource), themeSource);
-		const image = draw(
+		const image = await draw(
 			data,
 			source,
+			format,
 			themeSource === undefined ? undefined : { theme, path: themeSource },
 		);
 		if (values.output === undefined) io.stdout.write(image);
@@ -87,6 +103,7 @@ export async function run(args: string[], io: Io): Promise<number> {
 
 const options = {
 	output: { type: "string", short: "o" },
+	format: { type: "string" },
 	theme: { type: "string" },
 	help: { type: "boolean", short: "h" },
 	version: { type: "boolean" },
@@ -112,10 +129,23 @@ function parseStrictly(args: string[]) {
 	}
 }
 
-/** Checks that `output` names an SVG file, whatever the case of its extension. */
-function checkFormat(output: string): void {
-	if (extname(output).toLowerCase() !== ".svg")
-		throw usageError(`cannot tell the format of ${output}; name it .svg`);
+/** Chooses the output format and rejects unsupported extensions or conflicting options. */
+function outputFormat(
+	output: string | undefined,
+	requested: string | undefined,
+): "svg" | "png" {
+	if (requested !== undefined && requested !== "svg" && requested !== "png")
+		throw usageError(`unknown format ${requested}; choose svg or png`);
+	if (output === undefined) return requested ?? "svg";
+	const extension = extname(output).toLowerCase();
+	if (extension !== ".svg" && extension !== ".png")
+		throw usageError(
+			`cannot tell the format of ${output}; name it .svg or .png`,
+		);
+	const fromOutput = extension.slice(1) as "svg" | "png";
+	if (requested !== undefined && requested !== fromOutput)
+		throw usageError(`--format ${requested} conflicts with output ${output}`);
+	return fromOutput;
 }
 
 function usageError(message: string): Failure {
@@ -167,7 +197,10 @@ async function readLimited(
 	return new TextDecoder().decode(Buffer.concat(chunks));
 }
 
-async function writeOutput(path: string, content: string): Promise<void> {
+async function writeOutput(
+	path: string,
+	content: string | Uint8Array,
+): Promise<void> {
 	try {
 		await writeFile(path, content);
 	} catch (error) {
@@ -186,17 +219,19 @@ function parseJson(json: string, source: string): unknown {
 }
 
 /** Draws `data` from `source`, reporting a theme error against the theme file when one was given. */
-function draw(
+async function draw(
 	data: unknown,
 	source: string,
+	format: "svg" | "png",
 	themeFile?: { theme: unknown; path: string },
-): string {
+): Promise<string | Uint8Array> {
 	try {
-		// renderSvg validates its input at runtime: data read from JSON is safe to pass as is.
-		return renderSvg(
-			data as Sketch,
-			themeFile?.theme as Partial<Theme> | undefined,
-		);
+		// The public renderers validate JSON data and themes at runtime.
+		const sketch = data as Sketch;
+		const theme = themeFile?.theme as Partial<Theme> | undefined;
+		return format === "png"
+			? await renderPng(sketch, theme)
+			: renderSvg(sketch, theme);
 	} catch (error) {
 		if (error instanceof FatMarkerError)
 			throw new Failure(
