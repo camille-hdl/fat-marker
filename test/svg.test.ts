@@ -40,6 +40,7 @@ function sketch(
 	};
 }
 
+/** The places and affordances drawn in `svg`, each with its text and the `d` of all its paths. */
 function drawnGroups(svg: string): { text: string; d: string }[] {
 	return [
 		...svg.matchAll(/<g class="(?:place|affordance)">([\s\S]*?)<\/g>/g),
@@ -47,7 +48,7 @@ function drawnGroups(svg: string): { text: string; d: string }[] {
 		text: [...body.matchAll(/<tspan [^>]*>(.*?)<\/tspan>/g)]
 			.map(([, text]) => text)
 			.join(""),
-		d: body.match(/<path d="([^"]+)"/)?.[1] ?? "",
+		d: [...body.matchAll(/<path d="([^"]+)"/g)].map(([, d]) => d).join(" "),
 	}));
 }
 
@@ -99,16 +100,12 @@ const fixtures = [
 describe("renderSvg", () => {
 	describe("ADR 0003", () => {
 		test("keeps paths when a sibling after an affordance is added or removed", () => {
-			const before = sketch("A", "Plot", "Search");
-			const withSibling = sketch("A", "Plot", "Search", "Book");
-			assert.equal(
-				pathFor(renderSvg(before), "Search"),
-				pathFor(renderSvg(withSibling), "Search"),
-			);
-			assert.equal(
-				pathFor(renderSvg(withSibling), "Search"),
-				pathFor(renderSvg(before), "Search"),
-			);
+			const one = renderSvg(sketch("A", "Plot", "Search"));
+			const two = renderSvg(sketch("A", "Plot", "Search", "Book"));
+			const three = renderSvg(sketch("A", "Plot", "Search", "Book", "Filter"));
+			assert.equal(pathFor(one, "Search"), pathFor(two, "Search"));
+			assert.equal(pathFor(three, "Search"), pathFor(two, "Search"));
+			assert.equal(pathFor(three, "Book"), pathFor(two, "Book"));
 		});
 
 		test("keeps paths when a variant to the right changes", () => {
@@ -117,6 +114,8 @@ describe("renderSvg", () => {
 				twoVariants("Search", "A much wider submission label"),
 			);
 			assert.equal(pathFor(original, "Search"), pathFor(changed, "Search"));
+			// The first "Shared" drawn is the left variant's place.
+			assert.equal(pathFor(original, "Shared"), pathFor(changed, "Shared"));
 		});
 
 		test("keeps paths when a homonym is added in another place", () => {
@@ -154,6 +153,21 @@ describe("renderSvg", () => {
 			assertSameAfterTranslation(
 				pathFor(renderSvg(before), "Search"),
 				pathFor(renderSvg(after), "Search"),
+			);
+		});
+
+		test("keeps a place's frame up to translation when a place is added before it", () => {
+			const second = { place: "Second", contains: [{ affordance: "Search" }] };
+			const before = renderSvg({
+				variants: [{ variant: "A", contains: [second] }],
+			});
+			const after = renderSvg({
+				variants: [{ variant: "A", contains: [{ place: "First" }, second] }],
+			});
+			assert.notEqual(pathFor(before, "Second"), pathFor(after, "Second"));
+			assertSameAfterTranslation(
+				pathFor(before, "Second"),
+				pathFor(after, "Second"),
 			);
 		});
 

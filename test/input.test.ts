@@ -34,8 +34,13 @@ describe("readSketch", () => {
 										text: "Book a plot",
 										field: "variants[0].contains[0].contains[0].affordance",
 									},
-									key:
-										"affordance\0A · Plot list\0Plot list\0Book a plot\0" + "0",
+									key: [
+										"affordance",
+										"A · Plot list",
+										"Plot list",
+										"Book a plot",
+										"0",
+									].join("\0"),
 									read: false,
 								},
 							],
@@ -109,10 +114,10 @@ describe("readSketch, on nested places and rows", () => {
 			[booking.key, confirm.key, back.key, options.key, share.key],
 			[
 				"place\0A\0Booking",
-				"affordance\0A\0Booking\0Confirm\0" + "0",
-				"affordance\0A\0Booking\0Back\0" + "0",
+				["affordance", "A", "Booking", "Confirm", "0"].join("\0"),
+				["affordance", "A", "Booking", "Back", "0"].join("\0"),
 				"place\0A\0Options",
-				"affordance\0A\0Options\0Share\0" + "0",
+				["affordance", "A", "Options", "Share", "0"].join("\0"),
 			],
 		);
 	});
@@ -158,13 +163,16 @@ describe("readSketch, on nested places and rows", () => {
 			affordanceKeys,
 			[0, 1, 2, 3].map((rank) => `affordance\0A\0Outer\0Edit\0${rank}`),
 		);
-		const nestedPlace = outer.contents[1];
-		assert.ok(nestedPlace.kind === "row");
-		const inner = nestedPlace.contents[1];
+		const row = outer.contents[1];
+		assert.ok(row.kind === "row");
+		const inner = row.contents[1];
 		assert.ok(inner.kind === "place");
 		assert.equal(inner.contents[0].kind, "affordance");
 		if (inner.contents[0].kind === "affordance") {
-			assert.equal(inner.contents[0].key, "affordance\0A\0Inner\0Edit\0" + "0");
+			assert.equal(
+				inner.contents[0].key,
+				["affordance", "A", "Inner", "Edit", "0"].join("\0"),
+			);
 		}
 	});
 });
