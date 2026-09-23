@@ -111,8 +111,9 @@ export function wavy(
 
 /**
  * An arrow along `path`: its cubics, only their inner control points shaken, then an open V head of two strokes at its
- * end, along the last tangent drawn. Its halo follows the same cubics, without the head, and stops HALO_SHORTFALL short
- * of the tip.
+ * end, along the last tangent drawn. The last control point is not shaken, so the arrow arrives along the tangent of
+ * `path`, square into its edge, and its head with it. Its halo follows the same cubics, without the head, and stops
+ * HALO_SHORTFALL short of the tip.
  */
 export function arrow(
 	path: Cubic[],
@@ -120,8 +121,10 @@ export function arrow(
 	random: Random,
 ): { stroke: string; halo: string } {
 	const cubics = path.map((cubic) => shakenCubic(cubic, em, random));
-	const last = cubics[cubics.length - 1];
-	const [, , control, tip] = last;
+	const [start, c1, , tip] = cubics[cubics.length - 1];
+	const control = path[path.length - 1][2];
+	const last: Cubic = [start, c1, control, tip];
+	cubics[cubics.length - 1] = last;
 	return {
 		stroke: `${curve(cubics)} ${head(tip, control, em, random)}`,
 		halo: curve([...cubics.slice(0, -1), shortOf(last, HALO_SHORTFALL * em)]),

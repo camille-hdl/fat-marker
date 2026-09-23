@@ -828,6 +828,28 @@ describe("renderSvg", () => {
 		}
 	});
 
+	test("points each head of a corridor arrow square into the edge, its last control point level with its tip", () => {
+		for (const group of arrowGroups(renderSvg(fixture("arrows")))) {
+			const d = group.match(/<path d="([^"]+)"/)?.[1] ?? "";
+			const end = d.match(
+				/C-?[\d.]+,-?[\d.]+ (-?[\d.]+),(-?[\d.]+) (-?[\d.]+),(-?[\d.]+) M(-?[\d.]+),(-?[\d.]+) L-?[\d.]+,-?[\d.]+ L(-?[\d.]+),(-?[\d.]+)$/,
+			);
+			assert.ok(end, d);
+			const [control, tip, wing, otherWing] = [1, 3, 5, 7].map((i) => ({
+				x: Number(end[i]),
+				y: Number(end[i + 1]),
+			}));
+			assert.ok(Math.abs(control.y - tip.y) <= 0.1, d);
+			assert.ok(control.x > tip.x, d);
+			// The wings open back towards the lane, each at its own angle, within half HEAD_ANGLE_SPREAD of each other.
+			const back = Math.atan2(
+				wing.y + otherWing.y - 2 * tip.y,
+				wing.x + otherWing.x - 2 * tip.x,
+			);
+			assert.ok(Math.abs(back) < 0.06, `${back}: ${d}`);
+		}
+	});
+
 	test("draws the same sketch the same way twice", () => {
 		assert.equal(renderSvg(fixture("minimal")), renderSvg(fixture("minimal")));
 	});
