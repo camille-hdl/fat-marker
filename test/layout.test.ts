@@ -664,6 +664,20 @@ describe("layout", () => {
 		}
 	});
 
+	test("wraps a place name at the width of its contents when they are wider than 12 em", () => {
+		const [rota, button] = laidOut(
+			fixture("long-text"),
+		).variants[0].items.slice(-2);
+		assert.ok(rota.kind === "place" && button.kind === "affordance");
+		assert.ok(button.box.width > NAME_WRAP_MIN);
+		assert.ok(rota.name.lines.length >= 2, rota.name.lines.join("|"));
+		const widths = rota.name.lines.map((line) =>
+			measure(line, 700, rota.name.size),
+		);
+		for (const width of widths) assert.ok(width <= button.box.width);
+		assert.ok(widths.some((width) => width > NAME_WRAP_MIN));
+	});
+
 	test("keeps a single overlong word whole, in a box that fits it", () => {
 		const { items } = laidOut(fixture("long-text")).variants[0];
 		const word = items.find(

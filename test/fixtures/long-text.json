@@ -19,6 +19,14 @@
 							"contains": [{ "affordance": "Renew" }]
 						}
 					]
+				},
+				{
+					"place": "Watering rota for the summer holidays, when neighbours water each other's plots in turn",
+					"contains": [
+						{
+							"affordance": "Wateringrotaforneighbouringplotholdersduringholidays"
+						}
+					]
 				}
 			]
 		},
