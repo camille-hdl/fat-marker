@@ -678,6 +678,16 @@ describe("layout", () => {
 		assert.ok(widths.some((width) => width > NAME_WRAP_MIN));
 	});
 
+	test("keeps the box of a name within contents wider than 12 em", () => {
+		const [variant] = laidOut(fixture("long-text")).variants;
+		const [rota, button] = variant.items.slice(-2);
+		assert.ok(rota.kind === "place" && button.kind === "affordance");
+		assert.ok(rota.name.box.width <= button.box.width);
+		assert.ok(variant.column.width > NAME_WRAP_MIN);
+		assert.ok(variant.heading.lines.length >= 2);
+		assert.ok(variant.heading.box.width <= variant.column.width);
+	});
+
 	test("keeps a single overlong word whole, in a box that fits it", () => {
 		const { items } = laidOut(fixture("long-text")).variants[0];
 		const word = items.find(

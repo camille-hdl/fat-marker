@@ -169,12 +169,7 @@ function placeVariant(variant: ModelVariant, em: number): LaidVariant {
 	placeColumn(contents, { x: 0, y: 0, width }, em, items);
 	const column = { x: 0, y: 0, width, height };
 	const size = VARIANT_NAME_SIZE * em;
-	const lines = wrap(
-		variant.name.text,
-		Math.max(width, NAME_WRAP_MIN * em),
-		700,
-		size,
-	);
+	const lines = wrap(variant.name.text, nameWrap(width, em), 700, size);
 	const heading = textBlock(
 		lines,
 		700,
@@ -252,12 +247,7 @@ function measurePlace(place: ModelPlace, em: number): MeasuredPlace {
 	const contents = place.contents.map((content) => measureContent(content, em));
 	const column = columnSize(contents, em);
 	const size = PLACE_NAME_SIZE * em;
-	const lines = wrap(
-		place.name.text,
-		Math.max(column.width, NAME_WRAP_MIN * em),
-		700,
-		size,
-	);
+	const lines = wrap(place.name.text, nameWrap(column.width, em), 700, size);
 	const name = textBlock(lines, 700, size, "start", 0, 0, place.name.field);
 	const below = contents.length === 0 ? 0 : NAME_GAP * em + column.height;
 	return {
@@ -268,6 +258,14 @@ function measurePlace(place: ModelPlace, em: number): MeasuredPlace {
 		width: Math.max(name.box.width, column.width) + 2 * PLACE_PADDING * em,
 		height: name.box.height + below + 2 * PLACE_PADDING * em,
 	};
+}
+
+/**
+ * The width a name wraps at, over contents `width` wide: 12 em, or wider contents, so that the name's box, with its
+ * room, does not widen them.
+ */
+function nameWrap(width: number, em: number): number {
+	return Math.max(width / TEXT_ROOM, NAME_WRAP_MIN * em);
 }
 
 /** A row: its contents side by side, apart, as tall as the tallest. */
