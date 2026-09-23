@@ -56,7 +56,7 @@ export async function toPng(svg: string, layout: Layout): Promise<Uint8Array> {
 
 /** Throws on the first drawn text block with a character the embedded font lacks. */
 function checkCoverage(layout: Layout): void {
-	const blocks: (Text | TextBlock)[] = [
+	const blocks: TextBlock[] = [
 		...(layout.title ? [layout.title] : []),
 		...(layout.subtitle ? [layout.subtitle] : []),
 		...layout.variants.flatMap(({ heading, items }) => [
@@ -67,7 +67,7 @@ function checkCoverage(layout: Layout): void {
 		]),
 	];
 	for (const block of blocks) {
-		const text = "lines" in block ? block.lines.join(" ") : block.text;
+		const text = block.lines.join(" ");
 		const missing = uncovered(text);
 		if (missing.length > 0) {
 			const characters = missing
