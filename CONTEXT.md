@@ -65,6 +65,10 @@ _Avoid_: gutter, channel
 One arrow's track in a corridor, in data order.
 _Avoid_: track, slot
 
+**Hemmed** (place):
+A place with something right of it in a row, or inside such a place; the arrows into its right edge arrive at its bottom, under the names of the row.
+_Avoid_: bordered, blocked
+
 **Name** (of a place):
 Short text that identifies a place, unique within its variant, drawn as the place's heading and used by arrows to point at it.
 _Avoid_: title (reserved for the sketch), label, id

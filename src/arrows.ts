@@ -35,12 +35,15 @@ const KAPPA = 0.5523;
 const NESTED_MAX = 16;
 /** How far left of a left edge a direct arrow into it rises or falls: the middle of the gap between two contents of a row. */
 const RISE = 0.5;
+/** How far above the bottom corner of its right edge the lowest arrival into a hemmed place is: half a place's padding. */
+const LOW = 0.45;
 
 /**
  * Routes the arrows of `variant`, laid out as `items` in `column`, in data order. An arrow to the place just below its
  * affordance's branch reaches its top edge, and one to the place just right of it in a row its left edge, each in one
  * cubic; every other arrow runs through its own lane in a corridor right of the column, into the right edge of its
- * target. Also returns the width the corridor takes right of the column.
+ * target, with a flat last turn when that target is hemmed. Also returns the width the corridor takes right of the
+ * column.
  */
 export function routeArrows(
 	variant: ModelVariant,
@@ -62,8 +65,10 @@ export function routeArrows(
 		return { x: box.x + box.width, y: box.y + box.height / 2 };
 	});
 	const areaRight = column.x + column.width + corridor;
+	const hemmed = hemmedOf(variant);
 	const arrivals = spreadArrivals(
 		variant,
+		hemmed,
 		sides,
 		starts,
 		places,
@@ -81,11 +86,8 @@ export function routeArrows(
 			column.x +
 			column.width +
 			(CORRIDOR_GAP + (lane++ + 0.5) * LANE_WIDTH) * em;
-		return {
-			arrow,
-			side,
-			path: throughLane(start, x, end, TURN_RADIUS * em),
-		};
+		const route = hemmed.has(arrow.to) ? throughLaneFlat : throughLane;
+		return { arrow, side, path: route(start, x, end, TURN_RADIUS * em) };
 	});
 	return { arrows, corridor };
 }
@@ -132,13 +134,35 @@ function sidesOf(variant: ModelVariant): Side[] {
 }
 
 /**
+ * The places of `variant` with something right of them in a row, and those inside them: hemmed on the right. The names
+ * of a row are level, so an arrow into the right edge of one of them at the height of its name would strike through
+ * the names on its right; but the places of a row are as tall as it, so the bottom of their padding is free.
+ */
+function hemmedOf(variant: ModelVariant): Set<ModelPlace> {
+	const hemmed = new Set<ModelPlace>();
+	const visit = (contents: ModelContent[], row: boolean, within: boolean) => {
+		for (const [position, content] of contents.entries()) {
+			const own = within || (row && position < contents.length - 1);
+			if (content.kind === "affordance") continue;
+			if (own && content.kind === "place") hemmed.add(content);
+			visit(content.contents, content.kind === "row", own);
+		}
+	};
+	visit(variant.contents, false, false);
+	return hemmed;
+}
+
+/**
  * Where each arrow of `variant`, from its start in `starts`, reaches the `sides` of its target, in data order. The
  * arrivals on one top edge go at (i + 1)/(n + 1) of its width, and those on one side edge down every ARRIVAL_STEP
  * from the middle of the name's first line, or evenly down to the bottom corner of the frame when that would pass it.
- * They go to the arrows of the edge in an order that keeps them from crossing before their heads.
+ * On the right edge of a `hemmed` place, they go up instead, every ARRIVAL_STEP from LOW above the bottom corner, or
+ * evenly up to the middle of the name's first line. They go to the arrows of the edge in an order that keeps them from
+ * crossing before their heads.
  */
 function spreadArrivals(
 	variant: ModelVariant,
+	hemmed: Set<ModelPlace>,
 	sides: Side[],
 	starts: Point[],
 	places: Map<ModelPlace, LaidPlace>,
@@ -173,20 +197,22 @@ function spreadArrivals(
 			}
 			continue;
 		}
+		const low = side === "right" && hemmed.has(to);
 		const top = name.box.y + name.lineHeight / 2;
-		const lowest = frame.y + frame.height;
+		const lowest = frame.y + frame.height - (low ? LOW * em : 0);
 		const step =
 			arrows.length > 1
 				? Math.min(ARRIVAL_STEP * em, (lowest - top) / (arrows.length - 1))
 				: 0;
+		const first = low ? lowest - (arrows.length - 1) * step : top;
 		const x = side === "left" ? frame.x : frame.x + frame.width;
-		const middle = { x, y: top + ((arrows.length - 1) * step) / 2 };
+		const middle = { x, y: first + ((arrows.length - 1) * step) / 2 };
 		const order =
 			side === "left"
 				? acrossOrder(arrows, starts, middle, em)
 				: laneOrder(arrows, starts, middle.y);
 		for (const [rank, i] of order.entries()) {
-			arrivals[i] = { x, y: top + rank * step };
+			arrivals[i] = { x, y: first + rank * step };
 		}
 	}
 	return arrivals;
@@ -343,6 +369,35 @@ function throughLane(
 		quarterTurn(start, { x: 1, y: 0 }, into, { x: 0, y: down }),
 		straight(into, outOf),
 		quarterTurn(outOf, { x: 0, y: down }, end, { x: -1, y: 0 }),
+	];
+}
+
+/**
+ * An arrow from `start` down or up the lane at `x`, like `throughLane`, whose last turn is flat: a circular quarter
+ * turn to the height of `end`, then straight into it, so that it stays level with its arrival once past the lane.
+ * When the ends are less than two turns apart in height, the turns are smaller and there is no run between them; when
+ * they are less than a hundredth of a turn apart, too little for a turn, a single cubic.
+ */
+function throughLaneFlat(
+	start: Point,
+	x: number,
+	end: Point,
+	radius: number,
+): Cubic[] {
+	const height = end.y - start.y;
+	if (Math.abs(height) < radius / 100) {
+		return throughLane(start, x, end, radius);
+	}
+	const down = Math.sign(height);
+	const turn = Math.min(radius, Math.abs(height) / 2);
+	const into = { x, y: start.y + down * turn };
+	const outOf = { x, y: end.y - down * turn };
+	const level = { x: x - turn, y: end.y };
+	return [
+		quarterTurn(start, { x: 1, y: 0 }, into, { x: 0, y: down }),
+		...(Math.abs(height) > 2 * radius ? [straight(into, outOf)] : []),
+		quarterTurn(outOf, { x: 0, y: down }, level, { x: -1, y: 0 }),
+		straight(level, end),
 	];
 }
 

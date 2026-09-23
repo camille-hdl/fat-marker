@@ -444,11 +444,11 @@ const firstPoint = ({ path }: LaidArrow) => path[0][0];
 const lastPoint = ({ path }: LaidArrow) => path[path.length - 1][3];
 
 /**
- * The `x` of a corridor arrow's lane: that of its vertical run, or of both inner control points of a single cubic,
- * which the lane holds.
+ * The `x` of a corridor arrow's lane: that of both inner control points of a single cubic, which the lane holds, or of
+ * the end of its first turn, which enters the lane there, before its vertical run or its last turn.
  */
 function laneOf({ path }: LaidArrow): number {
-	const onLane = path.length === 3 ? path[1] : path[0].slice(1, 3);
+	const onLane = path.length === 1 ? path[0].slice(1, 3) : path[0].slice(2);
 	const [{ x }] = onLane;
 	assert.ok(
 		onLane.every((point) => close(point.x, x)),
@@ -520,12 +520,12 @@ function polyline(cubics: [Point, Point, Point, Point][]): Point[] {
 }
 
 /**
- * The part of an arrow from its lane to its arrival, as a polyline: its run and its last turn, or its single cubic from
- * its rightmost point, where a corridor arrow reaches its lane (a direct arrow reaches its edge from there).
+ * The part of an arrow from its lane to its arrival, as a polyline: all of it after its first turn, or its single cubic
+ * from its rightmost point, where a corridor arrow reaches its lane (a direct arrow reaches its edge from there).
  */
 function approachOf({ path }: LaidArrow): Point[] {
-	const points = polyline(path.length === 3 ? path.slice(1) : path);
-	if (path.length === 3) return points;
+	const points = polyline(path.length > 1 ? path.slice(1) : path);
+	if (path.length > 1) return points;
 	const rightmost = points.reduce(
 		(best, point, i) => (point.x > points[best].x ? i : best),
 		0,
@@ -1024,7 +1024,7 @@ const invariants: [string, (sketch: Sketch, laid: Layout) => void][] = [
 		},
 	],
 	[
-		"spreads the arrivals on one edge of a place apart, and never crosses two arrows of one edge between their lane and their arrival (arrow invariant 6)",
+		"spreads the arrivals on one edge of a place apart, and never crosses two arrows of one edge between their lane and their arrival, unless one starts level with the arrivals of a side edge (arrow invariant 6)",
 		(_, laid) => {
 			for (const variant of laid.variants) {
 				const edges = new Map<string, LaidArrow[]>();
@@ -1039,11 +1039,22 @@ const invariants: [string, (sketch: Sketch, laid: Layout) => void][] = [
 						const last = lastPoint(laidArrow);
 						return laidArrow.side === "top" ? last.x : last.y;
 					});
+					const [highest, lowest] = [Math.min(...along), Math.max(...along)];
+					/** Whether an arrow starts between the highest and the lowest arrival of its side edge: it may be crossed. */
+					const level = (laidArrow: LaidArrow) => {
+						const { y } = firstPoint(laidArrow);
+						return (
+							laidArrow.side !== "top" &&
+							y >= highest - EPSILON &&
+							y <= lowest + EPSILON
+						);
+					};
 					for (const [i, one] of arrows.entries()) {
 						for (const [j, other] of arrows.entries()) {
 							if (j <= i) continue;
 							const what = `${arrowName(one)} and ${arrowName(other)}`;
 							assert.ok(Math.abs(along[i] - along[j]) > EPSILON, what);
+							if (level(one) || level(other)) continue;
 							assert.ok(!crosses(approachOf(one), approachOf(other)), what);
 						}
 					}
@@ -1727,6 +1738,198 @@ describe("layout", () => {
 		}
 	});
 
+	/** Sketches whose corridor arrows go into places with something right of them in a row: hemmed places. */
+	const hemmed: Record<string, Variant["contains"]> = {
+		"a row, and arrows back up into its places": [
+			{
+				place: "Plot list",
+				contains: [{ affordance: "Pick a shed", to: "Shed" }],
+			},
+			{
+				row: [
+					{ place: "Map", contains: [{ affordance: "Zoom in" }] },
+					{
+						place: "Shed",
+						contains: [{ affordance: "Open tools", to: "Tools" }],
+					},
+					{
+						place: "Tools",
+						contains: [{ affordance: "Back to map", to: "Map" }],
+					},
+				],
+			},
+			{
+				place: "Booking",
+				contains: [
+					{ affordance: "See the map", to: "Map" },
+					{ affordance: "See the shed", to: "Shed" },
+					{ affordance: "See the tools", to: "Tools" },
+				],
+			},
+		],
+		"places nested in a place of a row": [
+			{
+				row: [
+					{
+						place: "Garden",
+						contains: [
+							{
+								row: [
+									{ place: "Beds", contains: [{ affordance: "Water" }] },
+									{ place: "Paths", contains: [{ affordance: "Rake" }] },
+								],
+							},
+							{ affordance: "Walk around" },
+						],
+					},
+					{
+						place: "Shed",
+						contains: [{ affordance: "Spade" }, { affordance: "Hose" }],
+					},
+				],
+			},
+			{
+				place: "Notes",
+				contains: [
+					{ affordance: "Back to beds", to: "Beds" },
+					{ affordance: "Back to paths", to: "Paths" },
+					{ affordance: "Back to garden", to: "Garden" },
+				],
+			},
+		],
+		"a row whose places get corridor and direct arrows": [
+			{
+				place: "Header",
+				contains: [
+					{ affordance: "Go to detail", to: "Detail" },
+					{ affordance: "Go to menu", to: "Menu" },
+				],
+			},
+			{
+				row: [
+					{
+						place: "Menu",
+						contains: [
+							{ affordance: "First item", to: "Detail" },
+							{ affordance: "Second item", to: "Detail" },
+						],
+					},
+					{
+						place: "Detail",
+						contains: [
+							{ affordance: "Back to menu", to: "Menu" },
+							{ affordance: "Close" },
+						],
+					},
+				],
+			},
+			{
+				place: "Footer",
+				contains: [
+					{ affordance: "Up to detail", to: "Detail" },
+					{ affordance: "Home", to: "Menu" },
+					{ affordance: "Top", to: "Header" },
+				],
+			},
+		],
+	};
+
+	/** The places the arrows of `hemmed` go into that are hemmed: neither they nor a place they are in end a row. */
+	const hemmedTargets = new Set([
+		"Map",
+		"Shed",
+		"Beds",
+		"Paths",
+		"Garden",
+		"Menu",
+	]);
+
+	test("never strikes through a place's name with a corridor arrow into a hemmed place", () => {
+		for (const [name, contains] of Object.entries(hemmed)) {
+			const [variant] = laidOut({
+				variants: [{ variant: "A", contains }],
+			}).variants;
+			const names = [...placesOf(variant).values()].map(
+				({ place, name }) => [place.name.text, name.box] as const,
+			);
+			for (const arrow of variant.arrows) {
+				if (arrow.side !== "right") continue;
+				for (const [text, box] of names) {
+					assert.ok(
+						polyline(arrow.path).every(
+							(point) => !inside(pointBox(point), box),
+						),
+						`${name}: ${arrowName(arrow)} across "${text}"`,
+					);
+				}
+			}
+		}
+	});
+
+	test("anchors the arrivals on the right edge of a hemmed place at its bottom: the lowest 0.45 em above the corner, then every 1 em up", () => {
+		const [variant] = laidOut({
+			variants: [
+				{
+					variant: "A",
+					contains: [
+						{
+							row: [
+								{
+									place: "Map",
+									contains: ["Zoom in", "Zoom out", "Layers", "Legend"].map(
+										(affordance) => ({ affordance }),
+									),
+								},
+								{ place: "Shed" },
+							],
+						},
+						{
+							place: "Booking",
+							contains: [
+								{ affordance: "See the map", to: "Map" },
+								{ affordance: "Show the map", to: "Map" },
+							],
+						},
+					],
+				},
+			],
+		}).variants;
+		const map = placeNamed(variant, "Map");
+		const ends = variant.arrows.map(lastPoint).map(({ y }) => y);
+		const lowest = bottom(map.frame) - 0.45 * em;
+		assert.deepEqual(
+			ends.map((y) => close(y, lowest) || close(y, lowest - ARRIVAL_STEP)),
+			[true, true],
+		);
+		assert.ok(!close(ends[0], ends[1]));
+	});
+
+	test("routes a corridor arrow into a hemmed place with a flat last turn: a circular quarter turn to the height of its arrival, then straight into the edge", () => {
+		for (const contains of Object.values(hemmed)) {
+			const [variant] = laidOut({
+				variants: [{ variant: "A", contains }],
+			}).variants;
+			for (const arrow of variant.arrows) {
+				const into = hemmedTargets.has(arrow.arrow.to.name.text);
+				if (!into || arrow.side !== "right") continue;
+				const [turn, level] = arrow.path.slice(-2);
+				const end = lastPoint(arrow);
+				const what = arrowName(arrow);
+				assert.ok(
+					level.every((point) => close(point.y, end.y)),
+					what,
+				);
+				assert.ok(
+					close(
+						Math.abs(turn[3].x - turn[0].x),
+						Math.abs(turn[3].y - turn[0].y),
+					),
+					what,
+				);
+			}
+		}
+	});
+
 	test("reserves 0.6 em of corridor right of the column for each corridor arrow", () => {
 		const rights = [1, 2, 3].map((count) => {
 			const [variant] = laidOut({
@@ -1777,11 +1980,11 @@ describe("layout", () => {
 					contains: [
 						{
 							row: [
-								{ place: "Garden", contains: [{ place: "Shed" }] },
 								{
 									place: "Plot",
 									contains: [{ affordance: "Store tools", to: "Shed" }],
 								},
+								{ place: "Garden", contains: [{ place: "Shed" }] },
 							],
 						},
 					],
