@@ -749,7 +749,7 @@ describe("readSketch, on copy, marks and scribbles", () => {
 			`${field}.scribble: only copy (read: true) can be a scribble`,
 		],
 		[
-			"a marked scribble, citing the mark first",
+			"a marked scribble, on its mark",
 			{ affordance: "Go", scribble: 2, mark: "link", read: true },
 			`${field}.mark: copy (read: true) has no mark`,
 		],
