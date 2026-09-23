@@ -171,6 +171,12 @@ describe("run", () => {
 			assert.equal(stdout, "");
 			assert.match(stderr, /^fat-marker: [\s\S]*\nTry fat-marker --help\n$/);
 		}
+		assert.deepEqual(await runCli([minimalPath, "--format", "\u001b[31m\u202e"]), {
+			code: 2,
+			stdout: "",
+			stderr:
+				'fat-marker: unknown format "\\u001b[31m\\u202e"; choose svg or png\nTry fat-marker --help\n',
+		});
 	});
 
 	test("refuses to write PNG to a terminal", async () => {

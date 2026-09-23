@@ -135,7 +135,9 @@ function outputFormat(
 	requested: string | undefined,
 ): "svg" | "png" {
 	if (requested !== undefined && requested !== "svg" && requested !== "png")
-		throw usageError(`unknown format ${requested}; choose svg or png`);
+		throw usageError(
+			`unknown format ${escapeUnsafeToPrint(JSON.stringify(requested))}; choose svg or png`,
+		);
 	if (output === undefined) return requested ?? "svg";
 	const extension = extname(output).toLowerCase();
 	if (extension !== ".svg" && extension !== ".png")
