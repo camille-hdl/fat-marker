@@ -35,6 +35,8 @@ const HEAD_LENGTH = 0.8;
 const HEAD_ANGLE = 0.45;
 /** How much wider than HEAD_ANGLE that angle can be, in radians. */
 const HEAD_ANGLE_SPREAD = 0.1;
+/** How far short of an arrow's tip its halo stops, so that it does not open the frame the head touches. */
+const HALO_SHORTFALL = 0.4;
 
 export type Random = () => number;
 
@@ -109,16 +111,53 @@ export function wavy(
 
 /**
  * An arrow along `path`: its cubics, only their inner control points shaken, then an open V head of two strokes at its
- * end, along the last tangent drawn.
+ * end, along the last tangent drawn. Its halo follows the same cubics, without the head, and stops HALO_SHORTFALL short
+ * of the tip.
  */
-export function arrow(path: Cubic[], em: number, random: Random): string {
+export function arrow(
+	path: Cubic[],
+	em: number,
+	random: Random,
+): { stroke: string; halo: string } {
 	const cubics = path.map((cubic) => shakenCubic(cubic, em, random));
-	const [, , control, tip] = cubics[cubics.length - 1];
+	const last = cubics[cubics.length - 1];
+	const [, , control, tip] = last;
+	return {
+		stroke: `${curve(cubics)} ${head(tip, control, em, random)}`,
+		halo: curve([...cubics.slice(0, -1), shortOf(last, HALO_SHORTFALL * em)]),
+	};
+}
+
+/** Joined cubics as a path. */
+function curve(cubics: Cubic[]): string {
 	return [
 		`M${xy(cubics[0][0])}`,
 		...cubics.map(([, c1, c2, end]) => `C${xy(c1)} ${xy(c2)} ${xy(end)}`),
-		head(tip, control, em, random),
 	].join(" ");
+}
+
+/** The part of `cubic` from its start to where it comes within `distance` of its end, found by bisection. */
+function shortOf(cubic: Cubic, distance: number): Cubic {
+	const end = cubic[3];
+	let [from, to] = [0, 1];
+	for (let i = 0; i < 20; i++) {
+		const t = (from + to) / 2;
+		const [, , , point] = split(cubic, t);
+		if (Math.hypot(point.x - end.x, point.y - end.y) > distance) from = t;
+		else to = t;
+	}
+	return split(cubic, from);
+}
+
+/** The part of `cubic` between its start and `t`, by de Casteljau's algorithm. */
+function split([p0, p1, p2, p3]: Cubic, t: number): Cubic {
+	const between = (a: Point, b: Point) => ({
+		x: a.x + t * (b.x - a.x),
+		y: a.y + t * (b.y - a.y),
+	});
+	const [a, b, c] = [between(p0, p1), between(p1, p2), between(p2, p3)];
+	const [d, e] = [between(a, b), between(b, c)];
+	return [p0, a, d, between(d, e)];
 }
 
 /** `cubic` with its two inner control points shaken: its ends stay where they join. */

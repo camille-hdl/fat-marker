@@ -72,7 +72,7 @@ export function toSvg(layout: Layout, theme: Theme): string {
 		),
 		...(theme.background === "transparent"
 			? []
-			: arrows.map((d) => drawHalo(d, theme))),
+			: arrows.map(({ halo }) => drawHalo(halo, theme))),
 		...layout.variants.map(({ heading, items }) =>
 			[
 				'<g class="text">',
@@ -81,7 +81,7 @@ export function toSvg(layout: Layout, theme: Theme): string {
 				"</g>",
 			].join("\n"),
 		),
-		...arrows.map((d) => drawArrow(d, theme)),
+		...arrows.map(({ stroke }) => drawArrow(stroke, theme)),
 		"</svg>",
 		"",
 	].join("\n");
@@ -212,8 +212,11 @@ function affordanceStrokes(
 	}
 }
 
-/** The `d` of every arrow of `layout`, all variants, in data order, each shaken by its own generator. */
-function arrowStrokes(layout: Layout, theme: Theme): string[] {
+/** Every arrow of `layout` and its halo, all variants, in data order, each shaken by its own generator. */
+function arrowStrokes(
+	layout: Layout,
+	theme: Theme,
+): { stroke: string; halo: string }[] {
 	return layout.variants.flatMap(({ arrows }) =>
 		arrows.map(({ arrow: { key }, path }) =>
 			arrow(path, theme.fontSize, wobble(theme, key)),

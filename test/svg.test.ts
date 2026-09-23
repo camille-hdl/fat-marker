@@ -759,9 +759,29 @@ describe("renderSvg", () => {
 		for (const [i, group] of arrows.entries()) {
 			const [halo, arrow] = [stroke(halos[i]), stroke(group)];
 			assert.deepEqual([halo.color, arrow.color], ["#fff1e5", "#0f5499"]);
-			assert.equal(halo.d, arrow.d);
 			assert.ok(halo.width > arrow.width);
 			assert.equal(arrow.width, 2.9); // 0.16 em
+		}
+	});
+
+	test("stops each halo 0.4 em short of its arrow's tip, along the same curve, without the head", () => {
+		const svg = renderSvg(fixture("arrows"));
+		const d = (group: string) => group.match(/<path d="([^"]+)"/)?.[1] ?? "";
+		const halos = haloGroups(svg).map(d);
+		for (const [i, arrow] of arrowGroups(svg).map(d).entries()) {
+			const halo = halos[i];
+			assert.equal(halo.match(/[ML]/g)?.join(""), "M", halo);
+			// The same cubics up to the last one, which the halo cuts short.
+			const lastCubic = halo.lastIndexOf(" C");
+			assert.ok(arrow.startsWith(halo.slice(0, lastCubic)), halo);
+			const end = halo.match(/(-?[\d.]+),(-?[\d.]+)$/);
+			const tip = arrow.match(/ L(-?[\d.]+),(-?[\d.]+) L[^L]+$/);
+			assert.ok(end && tip, arrow);
+			const shortfall = Math.hypot(
+				Number(end[1]) - Number(tip[1]),
+				Number(end[2]) - Number(tip[2]),
+			);
+			assert.ok(Math.abs(shortfall - 0.4 * 18) < 0.2, String(shortfall));
 		}
 	});
 
