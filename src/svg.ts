@@ -205,14 +205,14 @@ function affordanceStrokes(
 function drawArrow({ arrow: { key }, path }: LaidArrow, theme: Theme): string {
 	const em = theme.fontSize;
 	const d = arrow(path, em, wobble(theme, key));
-	const stroke = (color: string, width: number) =>
+	const drawn = (color: string, width: number) =>
 		`  <path d="${d}" fill="none" stroke="${color}" stroke-width="${num(width * em)}" stroke-linecap="round" stroke-linejoin="round"/>`;
 	return [
 		'<g class="arrow">',
 		...(theme.background === "transparent"
 			? []
-			: [stroke(theme.background, HALO_STROKE)]),
-		stroke(theme.accent, ARROW_STROKE),
+			: [drawn(theme.background, HALO_STROKE)]),
+		drawn(theme.accent, ARROW_STROKE),
 		"</g>",
 	].join("\n");
 }

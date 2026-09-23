@@ -254,7 +254,7 @@ type VariantReading = {
 	targets: Map<ModelAffordance, Text[]>;
 };
 
-/** Reads a non-empty array of contents, each with `readContent`. */
+/** Reads a non-empty array, of contents or of the names in `to`, each entry with `readContent`. */
 function readContents<T>(
 	contents: unknown,
 	field: string,
