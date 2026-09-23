@@ -5,6 +5,7 @@ Every drawn element takes its wobble from the theme's `seed` combined with a key
 ## Consequences
 
 - An element whose box changes size (a wider column, a longer name) keeps its random draws but applies them to a new geometry: its stroke looks alike, not identical. Unlike a hill chart, a sketch is not compared to the pixel.
+- The keys of the title, subtitle and variant name are reserved and unused in v1, since only text is drawn for them (decision 23).
 
 ## Considered Options
 

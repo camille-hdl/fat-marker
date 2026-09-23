@@ -469,15 +469,19 @@ function giveWobbleKeys(variant: ModelVariant): void {
 /** Sets the Wobble key of `place` and of everything it holds, at any depth. */
 function giveKeysIn(place: ModelPlace, variant: string): void {
 	place.key = ["place", variant, place.name.text].join("\0");
+	const ranks = new Map<string, number>();
 	for (const content of throughRows(place.contents)) {
 		if (content.kind === "place") {
 			giveKeysIn(content, variant);
 		} else {
+			const rank = ranks.get(content.text.text) ?? 0;
+			ranks.set(content.text.text, rank + 1);
 			content.key = [
 				"affordance",
 				variant,
 				place.name.text,
 				content.text.text,
+				String(rank),
 			].join("\0");
 		}
 	}

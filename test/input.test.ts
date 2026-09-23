@@ -34,7 +34,8 @@ describe("readSketch", () => {
 										text: "Book a plot",
 										field: "variants[0].contains[0].contains[0].affordance",
 									},
-									key: "affordance\0A · Plot list\0Plot list\0Book a plot",
+									key:
+										"affordance\0A · Plot list\0Plot list\0Book a plot\0" + "0",
 									read: false,
 								},
 							],
@@ -108,12 +109,63 @@ describe("readSketch, on nested places and rows", () => {
 			[booking.key, confirm.key, back.key, options.key, share.key],
 			[
 				"place\0A\0Booking",
-				"affordance\0A\0Booking\0Confirm",
-				"affordance\0A\0Booking\0Back",
+				"affordance\0A\0Booking\0Confirm\0" + "0",
+				"affordance\0A\0Booking\0Back\0" + "0",
 				"place\0A\0Options",
-				"affordance\0A\0Options\0Share",
+				"affordance\0A\0Options\0Share\0" + "0",
 			],
 		);
+	});
+
+	test("counts same-text affordances through rows but not nested places", () => {
+		const model = readSketch({
+			variants: [
+				{
+					variant: "A",
+					contains: [
+						{
+							place: "Outer",
+							contains: [
+								{ affordance: "Edit" },
+								{
+									row: [
+										{ affordance: "Edit" },
+										{ place: "Inner", contains: [{ affordance: "Edit" }] },
+									],
+								},
+								{ affordance: "Edit" },
+								{
+									row: [{ affordance: "Edit" }],
+								},
+							],
+						},
+					],
+				},
+			],
+		});
+		const outer = model.variants[0].contents[0];
+		assert.ok(outer.kind === "place");
+		const affordanceKeys = outer.contents.flatMap((content) =>
+			content.kind === "row"
+				? content.contents.flatMap((nested) =>
+						nested.kind === "affordance" ? [nested.key] : [],
+					)
+				: content.kind === "affordance"
+					? [content.key]
+					: [],
+		);
+		assert.deepEqual(
+			affordanceKeys,
+			[0, 1, 2, 3].map((rank) => `affordance\0A\0Outer\0Edit\0${rank}`),
+		);
+		const nestedPlace = outer.contents[1];
+		assert.ok(nestedPlace.kind === "row");
+		const inner = nestedPlace.contents[1];
+		assert.ok(inner.kind === "place");
+		assert.equal(inner.contents[0].kind, "affordance");
+		if (inner.contents[0].kind === "affordance") {
+			assert.equal(inner.contents[0].key, "affordance\0A\0Inner\0Edit\0" + "0");
+		}
 	});
 });
 

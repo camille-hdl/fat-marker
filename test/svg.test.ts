@@ -40,6 +40,54 @@ function sketch(
 	};
 }
 
+function drawnGroups(svg: string): { text: string; d: string }[] {
+	return [
+		...svg.matchAll(/<g class="(?:place|affordance)">([\s\S]*?)<\/g>/g),
+	].map(([, body]) => ({
+		text: [...body.matchAll(/<tspan [^>]*>(.*?)<\/tspan>/g)]
+			.map(([, text]) => text)
+			.join(""),
+		d: body.match(/<path d="([^"]+)"/)?.[1] ?? "",
+	}));
+}
+
+function pathFor(svg: string, text: string): string {
+	const group = drawnGroups(svg).find((item) => item.text === text);
+	assert.ok(group?.d, `no drawn path for ${text}`);
+	return group.d;
+}
+
+function assertSameAfterTranslation(before: string, after: string): void {
+	const points = (d: string) => {
+		const values = (d.match(/-?\d+(?:\.\d+)?/g) ?? []).map(Number);
+		const origin = values.slice(0, 2);
+		return values.map((value, i) => value - origin[i % 2]);
+	};
+	const [a, b] = [points(before), points(after)];
+	assert.equal(a.length, b.length, "path point counts differ");
+	for (let i = 0; i < a.length; i++) {
+		assert.ok(
+			Math.abs(a[i] - b[i]) <= 0.100001,
+			`point ${i}: ${a[i]} != ${b[i]}`,
+		);
+	}
+}
+
+function twoVariants(leftPlace: string, rightPlace: string): Sketch {
+	return {
+		variants: [
+			{
+				variant: "Left",
+				contains: [{ place: "Shared", contains: [{ affordance: leftPlace }] }],
+			},
+			{
+				variant: "Right",
+				contains: [{ place: "Shared", contains: [{ affordance: rightPlace }] }],
+			},
+		],
+	};
+}
+
 const fixtures = [
 	"minimal",
 	"title-subtitle",
@@ -49,6 +97,120 @@ const fixtures = [
 ];
 
 describe("renderSvg", () => {
+	describe("ADR 0003", () => {
+		test("keeps paths when a sibling after an affordance is added or removed", () => {
+			const before = sketch("A", "Plot", "Search");
+			const withSibling = sketch("A", "Plot", "Search", "Book");
+			assert.equal(
+				pathFor(renderSvg(before), "Search"),
+				pathFor(renderSvg(withSibling), "Search"),
+			);
+			assert.equal(
+				pathFor(renderSvg(withSibling), "Search"),
+				pathFor(renderSvg(before), "Search"),
+			);
+		});
+
+		test("keeps paths when a variant to the right changes", () => {
+			const original = renderSvg(twoVariants("Search", "Submit"));
+			const changed = renderSvg(
+				twoVariants("Search", "A much wider submission label"),
+			);
+			assert.equal(pathFor(original, "Search"), pathFor(changed, "Search"));
+		});
+
+		test("keeps paths when a homonym is added in another place", () => {
+			const before = {
+				variants: [
+					{
+						variant: "A",
+						contains: [
+							{ place: "First", contains: [{ affordance: "Edit" }] },
+							{ place: "Second" },
+						],
+					},
+				],
+			};
+			const after = {
+				variants: [
+					{
+						variant: "A",
+						contains: [
+							{ place: "First", contains: [{ affordance: "Edit" }] },
+							{ place: "Second", contains: [{ affordance: "Edit" }] },
+						],
+					},
+				],
+			};
+			assert.equal(
+				pathFor(renderSvg(before), "Edit"),
+				pathFor(renderSvg(after), "Edit"),
+			);
+		});
+
+		test("keeps paths up to translation when a sibling is added before an affordance", () => {
+			const before = sketch("A", "Plot", "Search");
+			const after = sketch("A", "Plot", "Filter", "Search");
+			assertSameAfterTranslation(
+				pathFor(renderSvg(before), "Search"),
+				pathFor(renderSvg(after), "Search"),
+			);
+		});
+
+		test("keeps paths up to translation when siblings are reordered", () => {
+			const before = renderSvg(sketch("A", "Plot", "Search", "Book"));
+			const after = renderSvg(sketch("A", "Plot", "Book", "Search"));
+			assertSameAfterTranslation(
+				pathFor(before, "Search"),
+				pathFor(after, "Search"),
+			);
+		});
+
+		test("keeps paths up to translation when a variant to the left widens", () => {
+			const before = renderSvg(twoVariants("Go", "Search"));
+			const after = renderSvg(
+				twoVariants("A substantially wider action label", "Search"),
+			);
+			assertSameAfterTranslation(
+				pathFor(before, "Search"),
+				pathFor(after, "Search"),
+			);
+		});
+
+		test("draws same-text affordances in one place differently", () => {
+			const svg = renderSvg(sketch("A", "Plot", "Edit", "Edit"));
+			const paths = drawnGroups(svg)
+				.filter((item) => item.text === "Edit")
+				.map((item) => item.d);
+			assert.equal(paths.length, 2);
+			assert.notEqual(paths[0], paths[1]);
+		});
+
+		test("changes every drawn path when the seed changes", () => {
+			const input = {
+				variants: [
+					{
+						variant: "A",
+						contains: [
+							{
+								place: "Plot",
+								contains: [{ affordance: "Search" }, { affordance: "Book" }],
+							},
+						],
+					},
+				],
+			};
+			const before = drawnGroups(renderSvg(input, { seed: 1 }));
+			const after = drawnGroups(renderSvg(input, { seed: 2 }));
+			assert.deepEqual(
+				before.map((item) => item.text),
+				after.map((item) => item.text),
+			);
+			assert.equal(before.length, 3);
+			assert.ok(before.every((item, i) => item.d !== after[i].d));
+		});
+	});
+
 	for (const name of fixtures) {
 		test(`draws the ${name} fixture as in its snapshot`, (t) => {
 			const path = fileURLToPath(
