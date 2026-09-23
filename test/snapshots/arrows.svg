@@ -156,12 +156,12 @@ B · Inline booking
   <path d="M168.7,522.0 C296.6,523.4 403.6,513.4 403.7,504.0 C400.4,349.6 402.5,201.1 403.7,46.6 C402.9,39.8 369.3,30.7 333.5,28.6 M345.4,36.7 L333.5,28.6 L346.6,22.7" fill="none" stroke="#0f5499" stroke-width="2.9" stroke-linecap="round" stroke-linejoin="round"/>
 </g>
 <g class="arrow">
-  <path d="M89.0,643.0 C268.8,643.3 414.0,634.8 414.5,625.0 C413.0,437.0 416.7,249.6 414.5,57.4 C416.2,45.6 380.2,39.3 333.5,39.4 M346.2,46.1 L333.5,39.4 L345.9,32.1" fill="none" stroke="#fff1e5" stroke-width="9.0" stroke-linecap="round" stroke-linejoin="round"/>
-  <path d="M89.0,643.0 C268.8,643.3 414.0,634.8 414.5,625.0 C413.0,437.0 416.7,249.6 414.5,57.4 C416.2,45.6 380.2,39.3 333.5,39.4 M346.2,46.1 L333.5,39.4 L345.9,32.1" fill="none" stroke="#0f5499" stroke-width="2.9" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M89.0,643.0 C268.8,643.3 414.0,634.8 414.5,625.0 C413.0,439.4 416.7,254.4 414.5,64.6 C416.2,52.8 380.2,46.5 333.5,46.6 M346.2,53.3 L333.5,46.6 L345.9,39.3" fill="none" stroke="#fff1e5" stroke-width="9.0" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M89.0,643.0 C268.8,643.3 414.0,634.8 414.5,625.0 C413.0,439.4 416.7,254.4 414.5,64.6 C416.2,52.8 380.2,46.5 333.5,46.6 M346.2,53.3 L333.5,46.6 L345.9,39.3" fill="none" stroke="#0f5499" stroke-width="2.9" stroke-linecap="round" stroke-linejoin="round"/>
 </g>
 <g class="arrow">
-  <path d="M216.0,696.1 C330.6,699.4 426.2,688.3 425.3,678.1 C427.1,472.5 423.5,273.7 425.3,68.2 C422.0,57.7 382.9,48.2 333.5,50.2 M346.4,56.6 L333.5,50.2 L345.5,42.2" fill="none" stroke="#fff1e5" stroke-width="9.0" stroke-linecap="round" stroke-linejoin="round"/>
-  <path d="M216.0,696.1 C330.6,699.4 426.2,688.3 425.3,678.1 C427.1,472.5 423.5,273.7 425.3,68.2 C422.0,57.7 382.9,48.2 333.5,50.2 M346.4,56.6 L333.5,50.2 L345.5,42.2" fill="none" stroke="#0f5499" stroke-width="2.9" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M216.0,696.1 C330.6,699.4 426.2,688.3 425.3,678.1 C427.1,477.3 423.5,283.3 425.3,82.6 C422.0,72.1 382.9,62.6 333.5,64.6 M346.4,71.0 L333.5,64.6 L345.5,56.6" fill="none" stroke="#fff1e5" stroke-width="9.0" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M216.0,696.1 C330.6,699.4 426.2,688.3 425.3,678.1 C427.1,477.3 423.5,283.3 425.3,82.6 C422.0,72.1 382.9,62.6 333.5,64.6 M346.4,71.0 L333.5,64.6 L345.5,56.6" fill="none" stroke="#0f5499" stroke-width="2.9" stroke-linecap="round" stroke-linejoin="round"/>
 </g>
 <g class="arrow">
   <path d="M610.2,63.0 C717.6,65.6 798.1,72.4 799.4,81.0 C801.7,87.5 796.5,93.4 799.4,102.8 C799.0,109.8 783.6,123.5 767.0,120.8 M778.3,129.7 L767.0,120.8 L780.5,115.8" fill="none" stroke="#fff1e5" stroke-width="9.0" stroke-linecap="round" stroke-linejoin="round"/>

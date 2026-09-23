@@ -13,8 +13,8 @@ import type {
 const CORRIDOR_GAP = 0.6;
 /** The width of one lane of a corridor. */
 const LANE_WIDTH = 0.6;
-/** Between two arrivals on the side edge of a place, when it is tall enough. */
-const ARRIVAL_STEP = 0.6;
+/** Between two arrivals on the side edge of a place, when it is tall enough: a head and its stroke. */
+const ARRIVAL_STEP = 1;
 /** The radius of an arrow's quarter turns, into its lane and out of it. */
 const TURN_RADIUS = 1;
 /** How far the control points of a quarter turn reach along its tangents, as a share of its extent: a circle's. */
@@ -23,14 +23,13 @@ const KAPPA = 0.5523;
 /**
  * Routes the arrows of `variant`, laid out as `items` in `column`, in data order: each one through its own lane in a
  * corridor right of the column, into the right edge of its target. Also returns the width the corridor takes right of
- * the column. `padding` is the room inside a place's frame.
+ * the column.
  */
 export function routeArrows(
 	variant: ModelVariant,
 	column: Box,
 	items: (LaidPlace | LaidAffordance)[],
 	em: number,
-	padding: number,
 ): { arrows: LaidArrow[]; corridor: number } {
 	const boxes = new Map<ModelAffordance, Box>();
 	const places = new Map<ModelPlace, LaidPlace>();
@@ -38,7 +37,7 @@ export function routeArrows(
 		if (item.kind === "place") places.set(item.place, item);
 		else boxes.set(item.affordance, item.box);
 	}
-	const arrivals = spreadArrivals(variant, places, em, padding);
+	const arrivals = spreadArrivals(variant, places, em);
 	const arrows = variant.arrows.map((arrow, lane): LaidArrow => {
 		const box = boxes.get(arrow.from) as Box;
 		const start = { x: box.x + box.width, y: box.y + box.height / 2 };
@@ -59,14 +58,13 @@ export function routeArrows(
 
 /**
  * Where each arrow of `variant` reaches the right edge of its target, in data order. The arrivals on one edge go down
- * every ARRIVAL_STEP from the middle of the name's first line, or evenly down to the bottom of the frame, less the
- * padding, when that would pass it.
+ * every ARRIVAL_STEP from the middle of the name's first line, or evenly down to the bottom corner of the frame when
+ * that would pass it.
  */
 function spreadArrivals(
 	variant: ModelVariant,
 	places: Map<ModelPlace, LaidPlace>,
 	em: number,
-	padding: number,
 ): Point[] {
 	const counts = new Map<ModelPlace, number>();
 	for (const { to } of variant.arrows)
@@ -77,7 +75,7 @@ function spreadArrivals(
 		const [count, rank] = [counts.get(to) ?? 1, reached.get(to) ?? 0];
 		reached.set(to, rank + 1);
 		const top = name.box.y + name.lineHeight / 2;
-		const lowest = frame.y + frame.height - padding;
+		const lowest = frame.y + frame.height;
 		const step =
 			count > 1 ? Math.min(ARRIVAL_STEP * em, (lowest - top) / (count - 1)) : 0;
 		return { x: frame.x + frame.width, y: top + rank * step };

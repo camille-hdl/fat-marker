@@ -30,6 +30,8 @@ const em = theme.fontSize;
 const GAP = 0.25 * em;
 /** Between two lanes of a corridor. */
 const LANE = 0.6 * em;
+/** Between two arrivals on a side edge, when it is tall enough. */
+const ARRIVAL_STEP = 1 * em;
 /** The smallest margin the invariants accept between the content and the edge of the viewBox. */
 const MARGIN = 0.5 * em;
 /** Button labels wrap at this width. */
@@ -363,15 +365,21 @@ function affordancesOf(
 	return affordances;
 }
 
-/** Whether `point` is on the `side` edge of `frame`, strictly between its corners. */
+/** Whether `point` is on the `side` edge of `frame`, strictly between its corners, or on the bottom corner of a side edge. */
 function onEdge(point: Point, frame: Box, side: LaidArrow["side"]): boolean {
-	const between = (value: number, from: number, to: number) =>
-		value > from + EPSILON && value < to - EPSILON;
 	if (side === "top") {
-		return close(point.y, frame.y) && between(point.x, frame.x, right(frame));
+		return (
+			close(point.y, frame.y) &&
+			point.x > frame.x + EPSILON &&
+			point.x < right(frame) - EPSILON
+		);
 	}
 	const x = side === "left" ? frame.x : right(frame);
-	return close(point.x, x) && between(point.y, frame.y, bottom(frame));
+	return (
+		close(point.x, x) &&
+		point.y > frame.y + EPSILON &&
+		point.y < bottom(frame) + EPSILON
+	);
 }
 
 /** Every point of an arrow's cubics, control points included. */
@@ -1206,7 +1214,7 @@ describe("layout", () => {
 		assert.deepEqual(firstPoint(receipt), firstPoint(waiting));
 	});
 
-	test("spreads the arrivals on a place's right edge every 0.6 em down from the middle of its name's first line", () => {
+	test("spreads the arrivals on a place's right edge every 1 em down from the middle of its name's first line", () => {
 		const [variant] = laidOut(fixture("arrows")).variants;
 		const list = [...placesOf(variant).values()].find(
 			(place) => place.place.name.text === "Plot list",
@@ -1218,11 +1226,11 @@ describe("layout", () => {
 		assert.equal(ends.length, 3);
 		const first = list.name.box.y + list.name.lineHeight / 2;
 		for (const [i, end] of ends.entries()) {
-			assert.ok(close(end.y, first + i * LANE), String(i));
+			assert.ok(close(end.y, first + i * ARRIVAL_STEP), String(i));
 		}
 	});
 
-	test("spreads the arrivals evenly down to the bottom of the frame, less the padding, when 0.6 em apart would pass it", () => {
+	test("spreads the arrivals evenly down to the bottom corner of the frame when 1 em apart would pass it", () => {
 		const [variant] = laidOut({
 			variants: [
 				{
@@ -1246,9 +1254,11 @@ describe("layout", () => {
 		assert.ok(receipt?.kind === "place");
 		const ends = variant.arrows.map(lastPoint);
 		const top = receipt.name.box.y + receipt.name.lineHeight / 2;
-		const padding = receipt.name.box.y - receipt.frame.y;
-		const lowest = bottom(receipt.frame) - padding;
-		assert.ok(top + 3 * LANE > lowest, "the frame is too short for 0.6 em");
+		const lowest = bottom(receipt.frame);
+		assert.ok(
+			top + 3 * ARRIVAL_STEP > lowest,
+			"the frame is too short for 1 em",
+		);
 		for (const [i, end] of ends.entries()) {
 			assert.ok(close(end.y, top + (i * (lowest - top)) / 3), String(i));
 		}

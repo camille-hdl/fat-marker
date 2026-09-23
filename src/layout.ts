@@ -206,13 +206,7 @@ function placeVariant(variant: ModelVariant, em: number): LaidVariant {
 		-HEADING_GAP * em - (lines.length * LINE_HEIGHT * size) / 2,
 		variant.name.field,
 	);
-	const { arrows, corridor } = routeArrows(
-		variant,
-		column,
-		items,
-		em,
-		PLACE_PADDING * em,
-	);
+	const { arrows, corridor } = routeArrows(variant, column, items, em);
 	return {
 		variant,
 		heading,
