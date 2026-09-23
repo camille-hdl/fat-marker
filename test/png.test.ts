@@ -148,7 +148,7 @@ describe("renderPng", () => {
 		};
 		assert.deepEqual(pngSize(await renderPng(horizontal, { fontSize: 96 })), {
 			width: 16_384,
-			height: 2_002,
+			height: 2_098,
 		});
 		await assert.rejects(
 			renderPng(
@@ -159,7 +159,7 @@ describe("renderPng", () => {
 				name: "FatMarkerError",
 				field: "(root)",
 				message:
-					"(root): PNG of 16386 × 1992 pixels is over the 16384-pixel limit on a side; render SVG instead",
+					"(root): PNG of 16386 × 2086 pixels is over the 16384-pixel limit on a side; render SVG instead",
 			},
 		);
 
@@ -171,8 +171,8 @@ describe("renderPng", () => {
 				},
 			],
 		};
-		assert.deepEqual(pngSize(await renderPng(vertical, { fontSize: 68.3 })), {
-			width: 858,
+		assert.deepEqual(pngSize(await renderPng(vertical, { fontSize: 61.855 })), {
+			width: 838,
 			height: 16_384,
 		});
 		await assert.rejects(
@@ -181,19 +181,19 @@ describe("renderPng", () => {
 					variants: [
 						{
 							variant: "A",
-							contains: Array.from({ length: 233 }, (_, i) => ({
+							contains: Array.from({ length: 210 }, (_, i) => ({
 								place: `P${i}`,
 							})),
 						},
 					],
 				},
-				{ fontSize: 7.5 },
+				{ fontSize: 7.517 },
 			),
 			{
 				name: "FatMarkerError",
 				field: "(root)",
 				message:
-					"(root): PNG of 110 × 16386 pixels is over the 16384-pixel limit on a side; render SVG instead",
+					"(root): PNG of 116 × 16386 pixels is over the 16384-pixel limit on a side; render SVG instead",
 			},
 		);
 	});

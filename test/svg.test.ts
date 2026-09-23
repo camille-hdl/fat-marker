@@ -5,6 +5,8 @@ import { readFileSync } from "node:fs";
 import { describe, test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { FatMarkerError, renderSvg, type Sketch } from "../src/index.ts";
+import { readSketch, readTheme } from "../src/input.ts";
+import { type Box, type Cubic, layout, type Point } from "../src/layout.ts";
 
 function fixture(name: string): Sketch {
 	const url = new URL(`fixtures/${name}.json`, import.meta.url);
@@ -143,6 +145,120 @@ function haloGroups(svg: string): string[] {
 function affordanceGroups(svg: string): string[] {
 	return svg.match(/<g class="affordance">[\s\S]*?<\/g>/g) ?? [];
 }
+
+/** The `d` of the first path of a group. */
+function dOf(group: string): string {
+	const d = group.match(/<path d="([^"]+)"/)?.[1];
+	assert.ok(d, group);
+	return d;
+}
+
+/** The points of a path's `d`, in order. */
+function pointsIn(d: string): Point[] {
+	return [...d.matchAll(/(-?[\d.]+),(-?[\d.]+)/g)].map(([, x, y]) => ({
+		x: Number(x),
+		y: Number(y),
+	}));
+}
+
+/** The last cubic of an arrow's curve, which ends at its tip, and the two wings of its head. */
+function arrowEnd(group: string): { cubic: Cubic; wings: [Point, Point] } {
+	const d = dOf(group);
+	const head = d.lastIndexOf(" M");
+	const [wing, tip, otherWing] = pointsIn(d.slice(head));
+	const cubic = pointsIn(d.slice(0, head)).slice(-4) as Cubic;
+	assert.deepEqual(cubic[3], tip, d);
+	return { cubic, wings: [wing, otherWing] };
+}
+
+function bezier([p0, p1, p2, p3]: Cubic, t: number): Point {
+	const [a, b, c, e] = [
+		(1 - t) ** 3,
+		3 * t * (1 - t) ** 2,
+		3 * t ** 2 * (1 - t),
+		t ** 3,
+	];
+	return {
+		x: a * p0.x + b * p1.x + c * p2.x + e * p3.x,
+		y: a * p0.y + b * p1.y + c * p2.y + e * p3.y,
+	};
+}
+
+/**
+ * The angle, in degrees, between the axis of an arrow's head, the bisector of its two wings, and the chord of its
+ * drawn curve over its last `length`: from the point of the curve that far from the tip, to the tip.
+ */
+function headTilt(group: string, length: number): number {
+	const { cubic, wings } = arrowEnd(group);
+	const tip = cubic[3];
+	const far = (t: number) => {
+		const point = bezier(cubic, t);
+		return Math.hypot(point.x - tip.x, point.y - tip.y) > length;
+	};
+	assert.ok(far(0), "a last cubic shorter than a head");
+	let [from, to] = [0, 1];
+	for (let i = 0; i < 30; i++) {
+		const t = (from + to) / 2;
+		if (far(t)) from = t;
+		else to = t;
+	}
+	const before = bezier(cubic, from);
+	const chord = Math.atan2(tip.y - before.y, tip.x - before.x);
+	const axis = Math.atan2(
+		2 * tip.y - wings[0].y - wings[1].y,
+		2 * tip.x - wings[0].x - wings[1].x,
+	);
+	const turn = axis - chord;
+	return (Math.abs(Math.atan2(Math.sin(turn), Math.cos(turn))) * 180) / Math.PI;
+}
+
+/** How far `point` is outside the `side` edge of `frame`: less than 0 inside. */
+function outsideOf(
+	point: Point,
+	frame: Box,
+	side: "top" | "left" | "right",
+): number {
+	if (side === "top") return frame.y - point.y;
+	if (side === "left") return frame.x - point.x;
+	return point.x - (frame.x + frame.width);
+}
+
+/** A hook into a top edge: the button carrying the arrow is the widest content of its place, over the target. */
+const hook: Sketch = {
+	variants: [
+		{
+			variant: "A",
+			contains: [
+				{
+					place: "Plots",
+					contains: [
+						{
+							affordance: "Book this plot for the whole summer season",
+							to: "Booking",
+						},
+					],
+				},
+				{ place: "Booking" },
+			],
+		},
+	],
+};
+
+/** A corridor arrow in lane 0, into the right edge of the place above. */
+const laneZero: Sketch = {
+	variants: [
+		{
+			variant: "A",
+			contains: [
+				{ place: "Plot list" },
+				{
+					place: "Booking",
+					contains: [{ affordance: "Back to plots", to: "Plot list" }],
+				},
+			],
+		},
+	],
+};
 
 describe("renderSvg", () => {
 	describe("ADR 0003", () => {
@@ -766,24 +882,37 @@ describe("renderSvg", () => {
 		}
 	});
 
-	test("stops each halo 0.4 em short of its arrow's tip, along the same curve, without the head", () => {
-		const svg = renderSvg(fixture("arrows"));
-		const d = (group: string) => group.match(/<path d="([^"]+)"/)?.[1] ?? "";
-		const halos = haloGroups(svg).map(d);
-		for (const [i, arrow] of arrowGroups(svg).map(d).entries()) {
-			const halo = halos[i];
-			assert.equal(halo.match(/[ML]/g)?.join(""), "M", halo);
-			// The same cubics up to the last one, which the halo cuts short.
-			const lastCubic = halo.lastIndexOf(" C");
-			assert.ok(arrow.startsWith(halo.slice(0, lastCubic)), halo);
-			const end = halo.match(/(-?[\d.]+),(-?[\d.]+)$/);
-			const tip = arrow.match(/ L(-?[\d.]+),(-?[\d.]+) L[^L]+$/);
-			assert.ok(end && tip, arrow);
-			const shortfall = Math.hypot(
-				Number(end[1]) - Number(tip[1]),
-				Number(end[2]) - Number(tip[2]),
+	test("stops each halo at least 0.35 em outside its target's edge, on the side the arrow comes from, along the same curve, without the head", () => {
+		for (const sketch of [
+			fixture("arrows"),
+			fixture("sample"),
+			hook,
+			laneZero,
+		]) {
+			const svg = renderSvg(sketch);
+			const [halos, drawn] = [haloGroups(svg), arrowGroups(svg)].map((groups) =>
+				groups.map(dOf),
 			);
-			assert.ok(Math.abs(shortfall - 0.4 * 18) < 0.2, String(shortfall));
+			const laid = layout(readSketch(sketch), readTheme(undefined));
+			const targets = laid.variants.flatMap(({ items, arrows }) =>
+				arrows.map(({ arrow, side }) => {
+					const place = items.find(
+						(item) => item.kind === "place" && item.place === arrow.to,
+					);
+					assert.ok(place?.kind === "place");
+					return { frame: place.frame, side };
+				}),
+			);
+			assert.equal(halos.length, targets.length);
+			for (const [i, halo] of halos.entries()) {
+				assert.equal(halo.match(/[ML]/g)?.join(""), "M", halo);
+				// The same cubics up to the last one, which the halo cuts short.
+				const lastCubic = halo.lastIndexOf(" C");
+				assert.ok(drawn[i].startsWith(halo.slice(0, lastCubic)), halo);
+				const { frame, side } = targets[i];
+				const outside = outsideOf(pointsIn(halo).at(-1) as Point, frame, side);
+				assert.ok(outside >= 0.35 * 18, `${outside}: ${halo}`);
+			}
 		}
 	});
 
@@ -830,32 +959,16 @@ describe("renderSvg", () => {
 		}
 	});
 
-	test("points each head square into its edge, its last control point in line with its tip, from above, the left or the right", () => {
-		const directions = new Set<string>();
-		for (const group of arrowGroups(renderSvg(fixture("arrows")))) {
-			const d = group.match(/<path d="([^"]+)"/)?.[1] ?? "";
-			const end = d.match(
-				/C-?[\d.]+,-?[\d.]+ (-?[\d.]+),(-?[\d.]+) (-?[\d.]+),(-?[\d.]+) M(-?[\d.]+),(-?[\d.]+) L-?[\d.]+,-?[\d.]+ L(-?[\d.]+),(-?[\d.]+)$/,
-			);
-			assert.ok(end, d);
-			const [control, tip, wing, otherWing] = [1, 3, 5, 7].map((i) => ({
-				x: Number(end[i]),
-				y: Number(end[i + 1]),
-			}));
-			const [dx, dy] = [control.x - tip.x, control.y - tip.y];
-			if (Math.abs(dx) <= 0.1 && dy < 0) directions.add("above");
-			else if (Math.abs(dy) <= 0.1) directions.add(dx < 0 ? "left" : "right");
-			else assert.fail(d);
-			// The wings open back towards the last control point, each at its own angle, within half HEAD_ANGLE_SPREAD of each other.
-			const back = Math.atan2(
-				wing.y + otherWing.y - 2 * tip.y,
-				wing.x + otherWing.x - 2 * tip.x,
-			);
-			const turn = back - Math.atan2(dy, dx);
-			const off = Math.abs(Math.atan2(Math.sin(turn), Math.cos(turn)));
-			assert.ok(off < 0.06, `${off}: ${d}`);
-		}
-		assert.deepEqual([...directions].sort(), ["above", "left", "right"]);
+	test("points the head of a hook into a top edge along its stroke over its last head length", () => {
+		const [group] = arrowGroups(renderSvg(hook));
+		const tilt = headTilt(group, 0.8 * 18);
+		assert.ok(tilt <= 4, `${tilt}°`);
+	});
+
+	test("points the head of a corridor arrow in lane 0 into the right edge of a place above along its stroke over its last head length", () => {
+		const [group] = arrowGroups(renderSvg(laneZero));
+		const tilt = headTilt(group, 0.8 * 18);
+		assert.ok(tilt <= 4, `${tilt}°`);
 	});
 
 	test("draws the same sketch the same way twice", () => {
