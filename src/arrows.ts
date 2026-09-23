@@ -282,7 +282,14 @@ function spreadArrivals(
 				}
 				[slotsRight] = lanes;
 			}
-			const slots = topSlots(frame.x, slotsRight, slotted, starts, em);
+			const slots = topSlots(
+				frame.x,
+				slotsRight,
+				stacked.length > 0,
+				slotted,
+				starts,
+				em,
+			);
 			const order = nested(slotted, slots, (i, x) =>
 				down(starts[i], { x, y }, right, em),
 			);
@@ -368,11 +375,13 @@ function levelHeights(
 /**
  * Where the `arrows` into a top edge from `left` to `right` reach it, left to right: at (i + 1)/(n + 1) of its part right
  * of the leftmost start and a turn, where each of them bends like an L, when that part is at least 1 em per arrow;
- * otherwise, of the whole edge.
+ * otherwise, of the whole edge. When `right` is the innermost lane of stacked starts, `atLane`, whose arrival is on the
+ * edge too, the slots stop ARRIVAL_STEP left of it, in either case.
  */
 function topSlots(
 	left: number,
 	right: number,
+	atLane: boolean,
 	arrows: number[],
 	starts: Point[],
 	em: number,
@@ -384,8 +393,9 @@ function topSlots(
 	const turned = leftmost + TURN_RADIUS * em;
 	const from =
 		right - turned >= arrows.length * em ? Math.max(left, turned) : left;
+	const end = atLane ? right - ARRIVAL_STEP * em : right;
 	return arrows.map(
-		(_, i) => from + ((i + 1) * (right - from)) / (arrows.length + 1),
+		(_, i) => from + ((i + 1) * (end - from)) / (arrows.length + 1),
 	);
 }
 

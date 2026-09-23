@@ -1141,7 +1141,7 @@ const invariants: [string, (sketch: Sketch, laid: Layout) => void][] = [
 		},
 	],
 	[
-		"gives each stacked start its own lane in its place, right of its contents, 1 em apart, runs down it into the top edge below, and never crosses another arrow of that place's lanes (arrow invariants 5 and 6)",
+		"gives each stacked start its own lane in its place, right of its contents, 1 em apart, runs down it into the top edge below, and never crosses another arrow of that place's lanes; the slots of that edge are at least 1 em left of the lanes (arrow invariants 5 and 6)",
 		(_, laid) => {
 			for (const variant of laid.variants) {
 				const [boxOf, places] = [boxFinder(variant), placesOf(variant)];
@@ -1193,6 +1193,19 @@ const invariants: [string, (sketch: Sketch, laid: Layout) => void][] = [
 								`${arrowName(one)} and ${arrowName(other)}`,
 							);
 						}
+					}
+					const [{ arrow }] = arrows;
+					const slots = variant.arrows.filter(
+						(laidArrow) =>
+							laidArrow.arrow.to === arrow.to &&
+							laidArrow.side === "top" &&
+							!stackedIn(variant.variant, laidArrow.arrow),
+					);
+					for (const slot of slots) {
+						assert.ok(
+							lanes[0] - lastPoint(slot).x >= ARRIVAL_STEP - EPSILON,
+							arrowName(slot),
+						);
 					}
 				}
 			}
@@ -2201,6 +2214,39 @@ describe("layout", () => {
 		assert.ok(leave);
 		assert.equal(leave.path.length, 1);
 		assert.ok(lastPoint(leave).x < lanes[2]);
+	});
+
+	test("spreads the slot of a top edge up to 1 em left of the innermost lane of stacked starts: it is at least 1 em from that lane, and still bends like an L", () => {
+		const [variant] = laidOut({
+			variants: [
+				{
+					variant: "A",
+					contains: [
+						{
+							place: "Plots",
+							contains: [
+								{ affordance: "Swap plots", to: "Map" },
+								{ affordance: "Leave it", to: "Map" },
+							],
+						},
+						{ place: "Map" },
+					],
+				},
+			],
+		}).variants;
+		const [swap, leave] = variant.arrows;
+		assert.deepEqual(
+			[swap.path.length, leave.path.length],
+			[2, 1],
+			"Swap plots takes a lane, Leave it a slot",
+		);
+		const lane = lastPoint(swap).x;
+		const turned = firstPoint(leave).x + em;
+		assert.ok(lane - turned >= em && lane - turned < 2 * em);
+		assert.ok(close(lastPoint(leave).x, (turned + lane - ARRIVAL_STEP) / 2));
+		const [[start, one, other, end]] = leave.path;
+		const corner = { x: end.x, y: start.y };
+		assert.deepEqual([one, other], [corner, corner]);
 	});
 
 	test("widens a place with stacked starts by their lanes: Welcome is 3 em wider than with no arrows (fan-in)", () => {
