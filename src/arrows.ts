@@ -375,8 +375,8 @@ function across(start: Point, end: Point, em: number): Cubic {
 
 /**
  * An arrow from `start`, leaving to the right, down or up the lane at `x`, to `end`, arriving to the left: a quarter
- * turn into the lane, a vertical run, a quarter turn out of it. When the ends are less than two turns apart in height,
- * a single cubic whose control points are on the lane.
+ * turn into the lane, a vertical run, a quarter turn out of it. When the ends are two turns apart in height or less,
+ * give or take a hundredth of a turn, a single cubic whose control points are on the lane.
  */
 function throughLane(
 	start: Point,
@@ -431,8 +431,8 @@ function throughLaneFlat(
 
 /**
  * Whether an arrow `height` high, turning into its lane at `into` and out of it at `outOf`, runs down or up the lane
- * between them: when its ends are more than two turns apart in height, and the rounding of `into` and `outOf` leaves
- * that run a length.
+ * between them: when that run is more than a hundredth of a turn long, so that ends two turns apart in height, give or
+ * take rounding, get none.
  */
 function runsBetween(
 	into: Point,
@@ -440,9 +440,7 @@ function runsBetween(
 	height: number,
 	radius: number,
 ): boolean {
-	return (
-		Math.abs(height) > 2 * radius && (outOf.y - into.y) * Math.sign(height) > 0
-	);
+	return (outOf.y - into.y) * Math.sign(height) > radius / 100;
 }
 
 /** A cubic from `from`, leaving along the unit vector `leaving`, to `to`, arriving along the unit vector `arriving`. */

@@ -2192,6 +2192,57 @@ describe("layout", () => {
 		assert.equal(arrow.path.length, 1);
 	});
 
+	test("routes a corridor arrow whose ends are two turns apart in height, give or take rounding, with no run down its lane", () => {
+		// the wrapped names and labels put "Visit…" 2 em below the upper of the two arrivals into Shed, and the Gate above
+		// shifts them to where floating-point sums leave a run of 6e-14 px
+		const arrow = arrowsOf(
+			laidOut({
+				variants: [
+					{
+						variant: "A",
+						contains: [
+							{ place: "Gate", contains: [{ affordance: "Open" }] },
+							{
+								row: [
+									{
+										place: "Plot 12, sunny, next to the shed, with a long name",
+										contains: [
+											{ place: "Shed" },
+											{
+												affordance: "Store tools",
+												mark: "checkbox",
+												to: "Shed",
+											},
+										],
+									},
+									{
+										place: "Garden of the allotment society",
+										contains: [
+											{
+												affordance: "Rules voted at the general meeting",
+												mark: "chevron",
+											},
+											{
+												affordance: "Visit the shed and the plot next to it",
+												to: "Shed",
+											},
+										],
+									},
+								],
+							},
+						],
+					},
+				],
+			}).variants[0],
+		).get("Visit the shed and the plot next to it → Shed");
+		assert.ok(arrow);
+		assert.equal(arrow.side, "right");
+		const height = lastPoint(arrow).y - arrow.path[0][0].y;
+		assert.ok(close(height, -2 * em), String(height));
+		// a turn into the lane, a turn out of it to the height of the arrival, straight into the hemmed place
+		assert.equal(arrow.path.length, 3);
+	});
+
 	test("lays out places nested 20 deep", () => {
 		let content: Content = { place: "P20", contains: [{ affordance: "Go" }] };
 		for (let level = 19; level >= 1; level--) {
