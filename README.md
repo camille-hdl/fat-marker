@@ -105,14 +105,15 @@ cat sketch.json | npx @camille-hdl/fat-marker -o sketch.svg
 
 Run `npx @camille-hdl/fat-marker --help` for the complete format guide and example.
 
+Installed in a project (`npm install @camille-hdl/fat-marker`), run it as `npx fat-marker` or from npm scripts.
+
 ## Theme
 
 A theme is a flat JSON object. Set only the keys to change; unspecified keys keep their defaults. Colors are `#rgb` or
 `#rrggbb`, except `background` may be `"transparent"`, which draws no background and no arrow halos. The default theme
 is available as `@camille-hdl/fat-marker/default-theme.json`.
 
-Installed in a project (`npm install @camille-hdl/fat-marker`), run the command as `npx @camille-hdl/fat-marker` or from
-an npm script. Start with a partial theme such as:
+Start with a partial theme such as:
 
 ```json
 { "background": "transparent", "accent": "#990f3d", "seed": 7 }

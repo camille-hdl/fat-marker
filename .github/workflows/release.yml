@@ -1,6 +1,8 @@
-# npmjs.com's trusted publisher names this file: rename it there too.
+# from @camille-hdl/hill-chart@0.2.0, 738a559
+# adapted: package name and tarball name
 name: Release
 
+# npmjs.com's trusted publisher names this file: rename it there too.
 on:
   push:
     tags: ["v*"]
@@ -52,7 +54,7 @@ jobs:
           npm pack --pack-destination "$RUNNER_TEMP/package"
           node -p 'const { name, version } = require("./package.json"); `name=${name}\nversion=${version}`' >> "$GITHUB_OUTPUT"
           echo "tarball=$(basename "$RUNNER_TEMP"/package/*.tgz)" >> "$GITHUB_OUTPUT"
-      # The tarball that will be published, tried as CI tries it: fonts, theme and wasm.
+      # The tarball that will be published, tried as ci.yml tries it: fonts, theme, wasm.
       - name: Smoke-test the packed tarball
         env:
           TARBALL: ${{ steps.pack.outputs.tarball }}
@@ -68,7 +70,8 @@ jobs:
           path: ${{ runner.temp }}/package/${{ steps.pack.outputs.tarball }}
           if-no-files-found: error
 
-  # Only npm and pinned GitHub actions run here: the OIDC token cannot reach repository code or dev dependencies.
+  # Only npm and two pinned GitHub actions run here: the OIDC token cannot reach the repository's code
+  # or its dev dependencies.
   publish:
     name: Publish ${{ github.ref_name }}
     needs: build
@@ -107,12 +110,13 @@ jobs:
             cat "$log" >&2
             exit 1
           fi
-      # Trusted publishing adds provenance; publishing this tarball runs no package lifecycle script.
+      # Trusted publishing: npm trades the job's OIDC token for a publish token and adds provenance.
+      # npm runs no lifecycle script when it publishes a tarball: prepack does not run again.
       - name: Publish to npm
         if: steps.npm.outputs.published == 'false'
         env:
           TARBALL: ${{ needs.build.outputs.tarball }}
-        run: npm publish "$RUNNER_TEMP/package/$TARBALL" --ignore-scripts
+        run: npm publish "$RUNNER_TEMP/package/$TARBALL"
 
   github-release:
     name: GitHub release ${{ github.ref_name }}

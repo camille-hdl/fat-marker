@@ -1,3 +1,4 @@
+# from @camille-hdl/hill-chart@0.2.0, 738a559
 version: 2
 updates:
   - package-ecosystem: npm
