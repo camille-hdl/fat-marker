@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { describe, test } from "node:test";
+import { Resvg } from "@resvg/resvg-wasm";
 import { renderPng, renderSvg, type Sketch } from "../src/index.ts";
 
 function fixture(name: string): Sketch {
@@ -42,6 +43,22 @@ describe("renderPng", () => {
 	test("renders identical bytes on repeated calls", async () => {
 		const sketch = fixture("rows");
 		assert.deepEqual(await renderPng(sketch), await renderPng(sketch));
+	});
+
+	test("frees the rasterizer's WebAssembly memory after each render", async (t) => {
+		type Rasterizer = InstanceType<typeof Resvg>;
+		const prototype = (Resvg as unknown as { prototype: Rasterizer }).prototype;
+		const render = prototype.render;
+		const rasterizerFree = t.mock.method(prototype, "free");
+		const imageFrees: { mock: { callCount(): number } }[] = [];
+		t.mock.method(prototype, "render", function (this: Rasterizer) {
+			const image = render.call(this);
+			imageFrees.push(t.mock.method(image, "free"));
+			return image;
+		});
+		await renderPng(fixture("rows"));
+		assert.equal(rasterizerFree.mock.callCount(), 1);
+		assert.deepEqual(imageFrees.map((free) => free.mock.callCount()), [1]);
 	});
 
 	test("reports missing drawn characters at their field with escaped code points", async () => {
