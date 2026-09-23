@@ -110,8 +110,8 @@ const GLYPHS: Record<
 	chevron: [0.35, 0.6],
 	handle: [0.6, 0.5],
 };
-/** The band a link's wavy underline runs in, centered on the bottom of its label. */
-const UNDERLINE_HEIGHT = 0.3;
+/** The band a link's wavy underline runs in, under the bottom of its label: its waves stay below the descenders. */
+const UNDERLINE_HEIGHT = 0.6;
 /** The last line of a scribble, as a share of the others. */
 const SCRIBBLE_LAST_LINE = 0.6;
 const MARGIN = 1;
@@ -519,7 +519,7 @@ function measureLink(affordance: ModelAffordance, em: number): LaidAffordance {
 	const label = labelOf(affordance, em, "start");
 	const glyph = {
 		x: 0,
-		y: label.box.height - (UNDERLINE_HEIGHT * em) / 2,
+		y: label.box.height,
 		width: largest(label.lines.map((line) => measure(line, 600, em))),
 		height: UNDERLINE_HEIGHT * em,
 	};

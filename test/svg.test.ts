@@ -370,6 +370,7 @@ describe("renderSvg", () => {
 				"- affordance: Sunny side (radio)",
 				"- affordance: Show on the map (toggle)",
 				"- affordance: Garden rules (link)",
+				"- affordance: Planting guide (link)",
 				"- affordance: Plot details (chevron)",
 				"- affordance: Reorder favourites (handle)",
 				"- affordance: Book a plot",
@@ -414,6 +415,41 @@ describe("renderSvg", () => {
 		}
 	});
 
+	test("draws a link's wavy underline below the descenders of its last line", () => {
+		/** How far g, j, p, q and y reach below the baseline, plus half a stroke: 0.25 em and 1.25 px. */
+		const descent = 0.25 * 18 + 1.25;
+		const svg = renderSvg({
+			variants: [
+				{
+					variant: "A",
+					contains: [
+						{
+							place: "P",
+							contains: [
+								{ affordance: "Planting guide", mark: "link" },
+								{
+									affordance: "Swap young plugs with your neighbours",
+									mark: "link",
+								},
+							],
+						},
+					],
+				},
+			],
+		});
+		for (const group of affordanceGroups(svg)) {
+			const baselines = [...group.matchAll(/<tspan [^>]*y="([^"]+)"/g)].map(
+				([, y]) => Number(y),
+			);
+			const [{ text, d }] = drawnGroups(group);
+			const ys = [...d.matchAll(/-?\d+\.\d,(-?\d+\.\d)/g)].map(([, y]) =>
+				Number(y),
+			);
+			assert.ok(baselines.length > 0 && ys.length > 0, text);
+			assert.ok(Math.min(...ys) >= Math.max(...baselines) + descent, text);
+		}
+	});
+
 	test("draws copy as bare text in ink, on the left", () => {
 		const [plot] = affordanceGroups(renderSvg(fixture("copy-scribble")));
 		assert.doesNotMatch(plot, /<path/);
@@ -429,7 +465,7 @@ describe("renderSvg", () => {
 		assert.deepEqual(fills, [
 			"#6b6259",
 			"#6b6259",
-			...Array(7).fill("#262a33"),
+			...Array(8).fill("#262a33"),
 		]);
 		for (const group of groups) {
 			assert.match(
@@ -443,10 +479,11 @@ describe("renderSvg", () => {
 		const groups = affordanceGroups(renderSvg(fixture("marks")));
 		const d = (group: string) => group.match(/<path d="([^"]+)"/)?.[1] ?? "";
 		const [field, select] = groups;
+		const button = groups.at(-1) ?? "";
 		assert.equal(d(field).match(/M/g)?.length, 4);
 		assert.equal(d(select).match(/M/g)?.length, 6);
-		assert.equal(d(groups[8]).match(/M/g)?.length, 1);
-		assert.match(d(groups[8]), /Z$/);
+		assert.equal(d(button).match(/M/g)?.length, 1);
+		assert.match(d(button), /Z$/);
 	});
 
 	test("draws nested places like top-level ones, and an empty place as its frame and name", () => {

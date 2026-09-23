@@ -801,7 +801,7 @@ describe("layout", () => {
 		const lastBaseline =
 			link.label.baseline +
 			(link.label.lines.length - 1) * link.label.lineHeight;
-		assert.ok(link.glyph.y > lastBaseline);
+		assert.ok(link.glyph.y >= lastBaseline + 0.25 * em);
 		assert.ok(link.glyph.width <= link.label.box.width);
 	});
 

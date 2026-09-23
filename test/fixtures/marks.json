@@ -12,6 +12,7 @@
 						{ "affordance": "Sunny side", "mark": "radio" },
 						{ "affordance": "Show on the map", "mark": "toggle" },
 						{ "affordance": "Garden rules", "mark": "link" },
+						{ "affordance": "Planting guide", "mark": "link" },
 						{ "affordance": "Plot details", "mark": "chevron" },
 						{ "affordance": "Reorder favourites", "mark": "handle" },
 						{ "affordance": "Book a plot" }
