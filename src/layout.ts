@@ -106,7 +106,7 @@ const GLYPHS: Record<
 > = {
 	checkbox: [0.8, 0.8],
 	radio: [0.8, 0.8],
-	toggle: [1.6, 0.9],
+	toggle: [1.8, 0.9],
 	chevron: [0.35, 0.6],
 	handle: [0.6, 0.6],
 };
