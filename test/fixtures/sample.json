@@ -1,0 +1,143 @@
+{
+	"title": "Booking a plot in the community garden",
+	"subtitle": "Shaping · week 2 · three directions to compare",
+	"variants": [
+		{
+			"variant": "A · Separate booking screen",
+			"contains": [
+				{
+					"place": "Plot list",
+					"contains": [
+						{ "affordance": "Plots free this season", "read": true },
+						{ "affordance": "Search plots", "mark": "field" },
+						{ "affordance": "Book a plot", "to": "Booking" },
+						{
+							"affordance": "Garden rules",
+							"mark": "link",
+							"to": "Waiting list"
+						}
+					]
+				},
+				{
+					"place": "Booking",
+					"contains": [
+						{
+							"row": [
+								{
+									"place": "Plot form",
+									"contains": [
+										{ "affordance": "Your name", "mark": "field" },
+										{ "affordance": "Plot size", "mark": "select" },
+										{ "affordance": "Check the map", "to": "Map" }
+									]
+								},
+								{
+									"place": "Map",
+									"contains": [
+										{
+											"affordance": "Where the plot lies",
+											"read": true,
+											"scribble": 2
+										}
+									]
+								}
+							]
+						},
+						{ "affordance": "Share with a neighbour", "mark": "checkbox" },
+						{ "affordance": "Confirm", "to": ["Receipt", "Waiting list"] },
+						{ "affordance": "Back to plots", "to": "Plot list" }
+					]
+				},
+				{
+					"place": "Receipt",
+					"contains": [
+						{ "affordance": "Plot 12 is yours until October", "read": true },
+						{ "affordance": "Done", "to": "Plot list" }
+					]
+				},
+				{
+					"place": "Waiting list",
+					"contains": [
+						{
+							"affordance": "Where you stand in the queue",
+							"read": true,
+							"scribble": 2
+						}
+					]
+				}
+			]
+		},
+		{
+			"variant": "B · Side panel on the map",
+			"contains": [
+				{
+					"row": [
+						{
+							"place": "Garden map",
+							"contains": [
+								{
+									"affordance": "Plot 12",
+									"mark": "chevron",
+									"to": "Plot panel"
+								},
+								{
+									"affordance": "Plot 14",
+									"mark": "chevron",
+									"to": "Plot panel"
+								}
+							]
+						},
+						{
+							"place": "Plot panel",
+							"contains": [
+								{ "affordance": "Sunny, next to the shed", "read": true },
+								{
+									"affordance": "Soil and watering notes",
+									"read": true,
+									"scribble": 3
+								},
+								{ "affordance": "Water share", "mark": "toggle" },
+								{ "affordance": "Book", "to": "Receipt" }
+							]
+						}
+					]
+				},
+				{
+					"place": "Receipt",
+					"contains": [
+						{ "affordance": "Plot 12 is yours", "read": true },
+						{ "affordance": "Back to the plot", "to": "Plot panel" }
+					]
+				}
+			]
+		},
+		{
+			"variant": "C · Booking dialog",
+			"contains": [
+				{
+					"place": "Plot list",
+					"contains": [
+						{ "affordance": "Sunny plots", "mark": "radio" },
+						{ "affordance": "Shady plots", "mark": "radio" },
+						{ "affordance": "Plot 12", "mark": "handle" },
+						{ "affordance": "Book", "to": "Booking dialog" },
+						{
+							"place": "Booking dialog",
+							"contains": [
+								{ "affordance": "Your name", "mark": "field" },
+								{ "affordance": "Confirm", "to": "Receipt" }
+							]
+						}
+					]
+				},
+				{
+					"place": "Receipt",
+					"contains": [
+						{ "affordance": "See you at the garden", "read": true },
+						{ "affordance": "Change the booking", "to": "Booking dialog" }
+					]
+				}
+			]
+		}
+	]
+}

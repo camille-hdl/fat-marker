@@ -123,6 +123,7 @@ const fixtures = [
 	"marks",
 	"copy-scribble",
 	"arrows",
+	"sample",
 ];
 
 /** The `<g class="arrow">` groups of `svg`, in drawing order: at least one. */
@@ -828,7 +829,8 @@ describe("renderSvg", () => {
 		}
 	});
 
-	test("points each head of a corridor arrow square into the edge, its last control point level with its tip", () => {
+	test("points each head square into its edge, its last control point in line with its tip, from above, the left or the right", () => {
+		const directions = new Set<string>();
 		for (const group of arrowGroups(renderSvg(fixture("arrows")))) {
 			const d = group.match(/<path d="([^"]+)"/)?.[1] ?? "";
 			const end = d.match(
@@ -839,15 +841,20 @@ describe("renderSvg", () => {
 				x: Number(end[i]),
 				y: Number(end[i + 1]),
 			}));
-			assert.ok(Math.abs(control.y - tip.y) <= 0.1, d);
-			assert.ok(control.x > tip.x, d);
-			// The wings open back towards the lane, each at its own angle, within half HEAD_ANGLE_SPREAD of each other.
+			const [dx, dy] = [control.x - tip.x, control.y - tip.y];
+			if (Math.abs(dx) <= 0.1 && dy < 0) directions.add("above");
+			else if (Math.abs(dy) <= 0.1) directions.add(dx < 0 ? "left" : "right");
+			else assert.fail(d);
+			// The wings open back towards the last control point, each at its own angle, within half HEAD_ANGLE_SPREAD of each other.
 			const back = Math.atan2(
 				wing.y + otherWing.y - 2 * tip.y,
 				wing.x + otherWing.x - 2 * tip.x,
 			);
-			assert.ok(Math.abs(back) < 0.06, `${back}: ${d}`);
+			const turn = back - Math.atan2(dy, dx);
+			const off = Math.abs(Math.atan2(Math.sin(turn), Math.cos(turn)));
+			assert.ok(off < 0.06, `${off}: ${d}`);
 		}
+		assert.deepEqual([...directions].sort(), ["above", "left", "right"]);
 	});
 
 	test("draws the same sketch the same way twice", () => {

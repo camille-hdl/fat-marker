@@ -8,8 +8,10 @@ import {
 	type Affordance,
 	type Content,
 	type ModelAffordance,
+	type ModelArrow,
 	type ModelContent,
 	type ModelPlace,
+	type ModelVariant,
 	readSketch,
 	readTheme,
 	type Sketch,
@@ -56,6 +58,7 @@ const fixtures = [
 	"marks",
 	"copy-scribble",
 	"arrows",
+	"sample",
 ];
 
 const sketches: Record<string, Sketch> = {
@@ -125,6 +128,7 @@ const sketches: Record<string, Sketch> = {
 						],
 					},
 					{ place: "Gap", contains: [{ affordance: "Up 3", to: "Hub" }] },
+					{ place: "Between" },
 					{
 						place: "Hub",
 						contains: ["A", "B", "C", "D", "E", "F"].map((affordance) => ({
@@ -454,26 +458,73 @@ function laneOf({ path }: LaidArrow): number {
 }
 
 /**
+ * The side an arrow reaches, read from the tree (spec › Arrow routing), under `C`, the deepest container shared by its
+ * affordance and its target, between `a'` and `t'`, the children of `C` that lead to them: the top edge when `C` stacks
+ * in a column, `t'` follows `a'`, and the target is on the top face of `t'`; the left edge when `C` is a row, `t'`
+ * follows `a'`, and the target is the leftmost place of `t'`; the right edge, through the corridor, otherwise.
+ */
+function sideFromTree(
+	variant: ModelVariant,
+	{ from, to }: ModelArrow,
+): LaidArrow["side"] {
+	const lineage = (
+		contents: ModelContent[],
+		sought: ModelContent,
+	): ModelContent[] | undefined => {
+		for (const content of contents) {
+			if (content === sought) return [content];
+			if (content.kind === "affordance") continue;
+			const below = lineage(content.contents, sought);
+			if (below) return [content, ...below];
+		}
+	};
+	const [toA, toT] = [
+		lineage(variant.contents, from),
+		lineage(variant.contents, to),
+	];
+	assert.ok(toA && toT);
+	let depth = 0;
+	while (toA[depth] === toT[depth]) depth++;
+	const shared = depth === 0 ? undefined : toA[depth - 1];
+	const siblings =
+		shared && shared.kind !== "affordance" ? shared.contents : variant.contents;
+	const [a, t] = [toA[depth], toT[depth]];
+	if (siblings.indexOf(t) !== siblings.indexOf(a) + 1) return "right";
+	/** The places on the top face of a content: itself for a place, all those of a row and of its rows. */
+	const topFace = (content: ModelContent): ModelContent[] =>
+		content.kind === "row" ? content.contents.flatMap(topFace) : [content];
+	/** The leftmost place of a content: itself for a place, the leftmost of the first content of a row. */
+	const leftmost = (content: ModelContent): ModelContent =>
+		content.kind === "row" ? leftmost(content.contents[0]) : content;
+	if (shared?.kind === "row") return leftmost(t) === to ? "left" : "right";
+	return topFace(t).includes(to) ? "top" : "right";
+}
+
+/** The points of `cubics`, 32 steps along each, as a polyline. */
+function polyline(cubics: [Point, Point, Point, Point][]): Point[] {
+	return cubics.flatMap(([p0, p1, p2, p3]) =>
+		Array.from({ length: 33 }, (_, k) => {
+			const t = k / 32;
+			const [a, b, c, d] = [
+				(1 - t) ** 3,
+				3 * t * (1 - t) ** 2,
+				3 * t ** 2 * (1 - t),
+				t ** 3,
+			];
+			return {
+				x: a * p0.x + b * p1.x + c * p2.x + d * p3.x,
+				y: a * p0.y + b * p1.y + c * p2.y + d * p3.y,
+			};
+		}),
+	);
+}
+
+/**
  * The part of an arrow from its lane to its arrival, as a polyline: its run and its last turn, or its single cubic from
- * its rightmost point, where it reaches its lane.
+ * its rightmost point, where a corridor arrow reaches its lane (a direct arrow reaches its edge from there).
  */
 function approachOf({ path }: LaidArrow): Point[] {
-	const points = (path.length === 3 ? path.slice(1) : path).flatMap(
-		([p0, p1, p2, p3]) =>
-			Array.from({ length: 33 }, (_, k) => {
-				const t = k / 32;
-				const [a, b, c, d] = [
-					(1 - t) ** 3,
-					3 * t * (1 - t) ** 2,
-					3 * t ** 2 * (1 - t),
-					t ** 3,
-				];
-				return {
-					x: a * p0.x + b * p1.x + c * p2.x + d * p3.x,
-					y: a * p0.y + b * p1.y + c * p2.y + d * p3.y,
-				};
-			}),
-	);
+	const points = polyline(path.length === 3 ? path.slice(1) : path);
 	if (path.length === 3) return points;
 	const rightmost = points.reduce(
 		(best, point, i) => (point.x > points[best].x ? i : best),
@@ -889,6 +940,20 @@ const invariants: [string, (sketch: Sketch, laid: Layout) => void][] = [
 					assert.ok(close(first.x, right(box)), what);
 					assert.ok(close(first.y, box.y + box.height / 2), what);
 					assert.ok(onEdge(last, frame, side), what);
+				}
+			}
+		},
+	],
+	[
+		"reaches the side of its target the tree gives it (arrow invariant 2)",
+		(_, laid) => {
+			for (const variant of laid.variants) {
+				for (const laidArrow of variant.arrows) {
+					assert.equal(
+						laidArrow.side,
+						sideFromTree(variant.variant, laidArrow.arrow),
+						arrowName(laidArrow),
+					);
 				}
 			}
 		},
@@ -1318,6 +1383,286 @@ describe("layout", () => {
 		assert.deepEqual(firstPoint(receipt), firstPoint(waiting));
 	});
 
+	/** The one variant of a sketch of `contains`, laid out, and its arrow from `affordance`. */
+	const arrowFrom = (
+		affordance: string,
+		contains: Variant["contains"],
+	): [LaidVariant, LaidArrow] => {
+		const [variant] = laidOut({
+			variants: [{ variant: "A", contains }],
+		}).variants;
+		const arrow = variant.arrows.find(
+			({ arrow }) => arrow.from.text.text === affordance,
+		);
+		assert.ok(arrow, affordance);
+		return [variant, arrow];
+	};
+	const placeNamed = (variant: LaidVariant, name: string) => {
+		const place = [...placesOf(variant).values()].find(
+			({ place }) => place.name.text === name,
+		);
+		assert.ok(place, name);
+		return place;
+	};
+
+	test("classifies an arrow to the place just below its affordance's place as below: one cubic into the middle of its top edge", () => {
+		const [variant, arrow] = arrowFrom("Book", [
+			{ place: "Plot list", contains: [{ affordance: "Book", to: "Booking" }] },
+			{ place: "Booking" },
+		]);
+		const { frame } = placeNamed(variant, "Booking");
+		assert.equal(arrow.side, "top");
+		assert.equal(arrow.path.length, 1);
+		assert.deepEqual(lastPoint(arrow), {
+			x: frame.x + frame.width / 2,
+			y: frame.y,
+		});
+	});
+
+	test("classifies an arrow to a place of the row just below as below, into any of the row's places", () => {
+		const [variant, arrow] = arrowFrom("Pick", [
+			{ place: "Plot list", contains: [{ affordance: "Pick", to: "Shed" }] },
+			{
+				row: [
+					{ place: "Map" },
+					{ row: [{ place: "Tools" }, { place: "Shed" }] },
+				],
+			},
+		]);
+		const { frame } = placeNamed(variant, "Shed");
+		assert.equal(arrow.side, "top");
+		assert.ok(onEdge(lastPoint(arrow), frame, "top"));
+	});
+
+	test("classifies an arrow to the place just right of its branch in a row as right: into its left edge, at the height of its name", () => {
+		const [variant, arrow] = arrowFrom("Open", [
+			{
+				place: "Plot",
+				contains: [
+					{
+						row: [
+							{ affordance: "Open", to: "Map" },
+							{ row: [{ place: "Map" }, { place: "Shed" }] },
+						],
+					},
+				],
+			},
+		]);
+		const { frame, name } = placeNamed(variant, "Map");
+		assert.equal(arrow.side, "left");
+		assert.equal(arrow.path.length, 1);
+		assert.deepEqual(lastPoint(arrow), {
+			x: frame.x,
+			y: name.box.y + name.lineHeight / 2,
+		});
+	});
+
+	test("classifies an arrow to a place further down but not adjacent as corridor", () => {
+		const [, arrow] = arrowFrom("Book", [
+			{ place: "Plot list", contains: [{ affordance: "Book", to: "Receipt" }] },
+			{ place: "Booking" },
+			{ place: "Receipt" },
+		]);
+		assert.equal(arrow.side, "right");
+	});
+
+	test("classifies an arrow going back up as corridor", () => {
+		const [, arrow] = arrowFrom("Back", [
+			{ place: "Plot list" },
+			{ place: "Booking", contains: [{ affordance: "Back", to: "Plot list" }] },
+		]);
+		assert.equal(arrow.side, "right");
+	});
+
+	test("classifies an arrow to a place on the left in a row as corridor", () => {
+		const [, arrow] = arrowFrom("Back", [
+			{
+				row: [
+					{ place: "Map" },
+					{ place: "Plot", contains: [{ affordance: "Back", to: "Map" }] },
+				],
+			},
+		]);
+		assert.equal(arrow.side, "right");
+	});
+
+	test("classifies an arrow to a place nested in the place just below as corridor", () => {
+		const [, arrow] = arrowFrom("Book", [
+			{ place: "Plot list", contains: [{ affordance: "Book", to: "Receipt" }] },
+			{
+				place: "Booking",
+				contains: [{ affordance: "Confirm" }, { place: "Receipt" }],
+			},
+		]);
+		assert.equal(arrow.side, "right");
+	});
+
+	/** Asserts that no two of `arrows` cross, all along. */
+	const neverCross = (arrows: LaidArrow[]) => {
+		for (const [i, one] of arrows.entries()) {
+			for (const other of arrows.slice(i + 1)) {
+				assert.ok(
+					!crosses(polyline(one.path), polyline(other.path)),
+					`${arrowName(one)} and ${arrowName(other)}`,
+				);
+			}
+		}
+	};
+
+	test("spreads the arrivals on a top edge at (i + 1)/(n + 1) of its width, the arrow from higher up further right when they all start left of them", () => {
+		const [variant] = laidOut({
+			variants: [
+				{
+					variant: "A",
+					contains: [
+						{
+							place: "Plot list",
+							contains: ["A", "B", "C"].map((affordance) => ({
+								affordance,
+								to: "Booking",
+							})),
+						},
+						{
+							place: "Booking",
+							contains: [
+								{
+									affordance:
+										"Share this plot with a neighbour who waters it in the summer",
+								},
+							],
+						},
+					],
+				},
+			],
+		}).variants;
+		const { frame } = placeNamed(variant, "Booking");
+		assert.deepEqual(
+			variant.arrows.map((arrow) => [arrow.side, lastPoint(arrow)]),
+			[3, 2, 1].map((i) => [
+				"top",
+				{ x: frame.x + (i * frame.width) / 4, y: frame.y },
+			]),
+		);
+	});
+
+	test("gives the slots of a top edge from the right, highest start first, to more than 16 arrows", () => {
+		const labels = Array.from({ length: 17 }, (_, i) => `Plot ${i + 1}`);
+		const [variant] = laidOut({
+			variants: [
+				{
+					variant: "A",
+					contains: [
+						{
+							place: "Plot list",
+							contains: labels.map((affordance, i) => ({
+								affordance,
+								...(i === 3 && { mark: "field" as const }),
+								to: "Booking",
+							})),
+						},
+						{ place: "Booking" },
+					],
+				},
+			],
+		}).variants;
+		assert.deepEqual(
+			[...variant.arrows]
+				.sort((one, other) => lastPoint(one).x - lastPoint(other).x)
+				.map(({ arrow }) => arrow.from.text.text),
+			labels.toReversed(),
+		);
+	});
+
+	test("nests the arrows into a top edge so that they never cross, when some start right of their arrivals", () => {
+		const [variant] = laidOut({
+			variants: [
+				{
+					variant: "A",
+					contains: [
+						{
+							place: "Plot list",
+							contains: [
+								{ affordance: "Book", to: ["Map", "Shed"] },
+								{
+									affordance: "Share this plot with a neighbour",
+									to: ["Map", "Shed"],
+								},
+								{ affordance: "Swap", to: "Map" },
+								{ affordance: "Leave the garden for good", to: "Map" },
+							],
+						},
+						{ row: [{ place: "Map" }, { place: "Shed" }] },
+					],
+				},
+			],
+		}).variants;
+		const map = placeNamed(variant, "Map");
+		const intoMap = variant.arrows.filter(
+			({ arrow }) => arrow.to === map.place,
+		);
+		assert.ok(
+			intoMap.some((arrow) => lastPoint(arrow).x < firstPoint(arrow).x),
+		);
+		assert.ok(intoMap.every(({ side }) => side === "top"));
+		neverCross(intoMap);
+		neverCross(variant.arrows.filter(({ arrow }) => arrow.to !== map.place));
+	});
+
+	test("orders the arrows into a left edge so that they never cross, as they are where all of them are drawn", () => {
+		const [variant] = laidOut({
+			variants: [
+				{
+					variant: "A",
+					contains: [
+						{
+							row: [
+								{
+									place: "Plot list",
+									contains: [
+										{ affordance: "Book a plot for the season", to: "Shed" },
+										{ affordance: "Swap", to: "Shed" },
+										{ affordance: "Tools", mark: "chevron", to: "Shed" },
+										{ affordance: "Leave", to: "Shed" },
+									],
+								},
+								{ place: "Shed" },
+							],
+						},
+					],
+				},
+			],
+		}).variants;
+		assert.ok(variant.arrows.every(({ side }) => side === "left"));
+		neverCross(variant.arrows);
+	});
+
+	test("reserves no corridor for a variant whose arrows are all direct: its area is as wide as its column", () => {
+		const [variant] = laidOut({
+			variants: [
+				{
+					variant: "A",
+					contains: [
+						{
+							place: "Plot list",
+							contains: [
+								{
+									row: [{ affordance: "Open", to: "Map" }, { place: "Map" }],
+								},
+								{ affordance: "Book", to: "Booking" },
+							],
+						},
+						{ place: "Booking" },
+					],
+				},
+			],
+		}).variants;
+		assert.deepEqual(
+			variant.arrows.map(({ side }) => side),
+			["left", "top"],
+		);
+		assert.ok(close(right(variant.area), right(variant.column)));
+	});
+
 	test("spreads the arrivals on a place's right edge every 1 em down from the middle of its name's first line", () => {
 		const [variant] = laidOut(fixture("arrows")).variants;
 		const list = [...placesOf(variant).values()].find(
@@ -1362,6 +1707,7 @@ describe("layout", () => {
 								}),
 							),
 						},
+						{ place: "Map" },
 						{ place: "Receipt" },
 					],
 				},
@@ -1381,7 +1727,7 @@ describe("layout", () => {
 		}
 	});
 
-	test("reserves 0.6 em of corridor right of the column for each arrow", () => {
+	test("reserves 0.6 em of corridor right of the column for each corridor arrow", () => {
 		const rights = [1, 2, 3].map((count) => {
 			const [variant] = laidOut({
 				variants: [
@@ -1397,6 +1743,7 @@ describe("layout", () => {
 									},
 								],
 							},
+							{ place: "Map" },
 							{ place: "Receipt" },
 							{ place: "Rules" },
 							{ place: "Help" },
