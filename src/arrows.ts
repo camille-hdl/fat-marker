@@ -215,13 +215,12 @@ function hemmedOf(variant: ModelVariant): Set<ModelPlace> {
 /**
  * Where each arrow of `variant`, from its start in `starts`, reaches the side of its target its route gives it, in data
  * order. The arrows of stacked starts into one top edge reach it down their lanes, right of the contents of their place;
- * the other arrivals on it go at the `topSlots` left of those lanes. The
- * arrivals on a left edge are at the heights of their starts, as near as `levelHeights` allows. Those on a right edge
- * go down every ARRIVAL_STEP from the middle of the name's first line, or evenly down to LOW above the bottom corner of
- * the frame when that would pass it; on the right edge of a `hemmed` place, they go up instead, every ARRIVAL_STEP from
- * LOW above the bottom corner, or evenly up to the middle of the name's first line. They go to the arrows of the edge
- * in an order that keeps them from crossing before their heads. Each arrival is ENTRY_DEPTH inside the frame, past its
- * edge.
+ * the other arrivals on it go at the `topSlots` left of those lanes. The arrivals on a left edge are at the heights of
+ * their starts, as near as `levelHeights` allows. Those on a right edge go down every ARRIVAL_STEP from the middle of
+ * the name's first line, or evenly down to LOW above the bottom corner of the frame when that would pass it; on the
+ * right edge of a `hemmed` place, they go up instead, every ARRIVAL_STEP from LOW above the bottom corner, or evenly up
+ * to the middle of the name's first line. They go to the arrows of the edge in an order that keeps them from crossing
+ * before their heads. Each arrival is ENTRY_DEPTH inside the frame, past its edge.
  */
 function spreadArrivals(
 	variant: ModelVariant,
@@ -269,6 +268,10 @@ function spreadArrivals(
 				const lanes = stacked.map(
 					(_, k) => contents + (k + 0.5) * STACK_LANE * em,
 				);
+				/**
+				 * Only the quarter turn into each lane: below it, the arrow runs straight down the lane, and
+				 * `pointWhere` gives the end of the turn, on the lane, for a start lower than that end.
+				 */
 				const order = nested(
 					stacked,
 					lanes,
@@ -402,7 +405,10 @@ function laneOrder(
 	return [...fromAbove, ...fromBelow];
 }
 
-/** The point of `cubic`, whose `axis` coordinate grows all along it, where that coordinate is `value`, found by bisection. */
+/**
+ * The point of `cubic`, whose `axis` coordinate grows all along it, where that coordinate is `value`, found by
+ * bisection; its end, when `value` is past it.
+ */
 function pointWhere(cubic: Cubic, axis: "x" | "y", value: number): Point {
 	let [from, to] = [0, 1];
 	for (let i = 0; i < 30; i++) {
@@ -428,10 +434,10 @@ function pointAt([p0, p1, p2, p3]: Cubic, t: number): Point {
 
 /**
  * `arrows` into one top edge in the order of the `slots` they take along it, or of the lanes they run down, left to
- * right, so that they nest and do not cross: the highest start takes the rightmost slot that has on its left exactly the others that start left of
- * its arrow `into` that slot's `x`, each at its own height, and the others share the slots on each side the same way.
- * As the slot goes right, the arrow does too, at every height, so that the others on its left never lessen: the search
- * stops at the latest on the leftmost slot.
+ * right, so that they nest and do not cross: the highest start takes the rightmost slot that has on its left exactly
+ * the others that start left of its arrow `into` that slot's `x`, each at its own height, and the others share the
+ * slots on each side the same way. As the slot goes right, the arrow does too, at every height, so that the others on
+ * its left never lessen: the search stops at the latest on the leftmost slot.
  */
 function nestedOrder(
 	arrows: number[],
