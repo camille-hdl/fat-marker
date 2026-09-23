@@ -2102,6 +2102,58 @@ describe("layout", () => {
 		assert.ok(close(lastPoint(book).y, toolsStart.y + ARRIVAL_STEP));
 	});
 
+	test("spreads the arrivals on a left edge too short for 1 em apart evenly, from the middle of its name's first line down to 0.45 em above its bottom corner, in the order of their starts", () => {
+		const labels = [
+			"Book",
+			"Water the beans every evening",
+			"Swap",
+			"Share",
+			"Leave",
+			"Borrow",
+		];
+		const [variant] = laidOut({
+			variants: [
+				{
+					variant: "A",
+					contains: [
+						{
+							row: [
+								{
+									place: "Plot",
+									contains: [
+										{
+											row: labels.map((affordance) => ({
+												affordance,
+												mark: "checkbox" as const,
+												to: "Shed",
+											})),
+										},
+									],
+								},
+								{ place: "Shed" },
+							],
+						},
+					],
+				},
+			],
+		}).variants;
+		const shed = placeNamed(variant, "Shed");
+		const top = shed.name.box.y + shed.name.lineHeight / 2;
+		const lowest = bottom(shed.frame) - LOW;
+		assert.ok(5 * ARRIVAL_STEP > lowest - top);
+		assert.ok(variant.arrows.every(({ side }) => side === "left"));
+		const byStart = variant.arrows.toSorted(
+			(one, other) => firstPoint(one).y - firstPoint(other).y,
+		);
+		assert.notDeepEqual(byStart, variant.arrows);
+		for (const [i, arrow] of byStart.entries()) {
+			assert.ok(
+				close(lastPoint(arrow).y, top + (i * (lowest - top)) / 5),
+				arrowName(arrow),
+			);
+		}
+	});
+
 	test("routes the arrows of stacked starts into a top edge down their own lanes, clear of every other affordance (fan-in)", () => {
 		const [below] = laidOut(fixture("fan-in")).variants;
 		const affordances = [...affordancesOf(below).values()];
