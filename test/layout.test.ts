@@ -366,11 +366,18 @@ function siblingGroups(variant: LaidVariant): Siblings[] {
 	return groups;
 }
 
-/** The gap between two neighbours of a column or of a row: wider between places and rows than next to an affordance. */
+/**
+ * The gap between two neighbours of a column or of a row: wider between places, or rows that hold places, than next to
+ * an affordance or a row of affordances.
+ */
 function siblingGap(one: ModelContent, other: ModelContent): number {
-	return one.kind === "affordance" || other.kind === "affordance"
-		? CONTENT_GAP
-		: PLACE_GAP;
+	return framesPlace(one) && framesPlace(other) ? PLACE_GAP : CONTENT_GAP;
+}
+
+/** Whether `content` is a place, or a row with a place in it, at any depth of nested rows. */
+function framesPlace(content: ModelContent): boolean {
+	if (content.kind === "row") return content.contents.some(framesPlace);
+	return content.kind === "place";
 }
 
 /** The places and affordances of `contents`, in document order, a place before its contents. */
@@ -1420,6 +1427,44 @@ describe("layout", () => {
 				},
 			],
 			([plot]) => contentsOf(plot),
+		);
+		assert.ok(close(gap, em), String(gap));
+	});
+
+	test("keeps a 1 em gap between two rows of buttons stacked in a place", () => {
+		const gap = measuredGap(
+			[
+				{
+					place: "Editor",
+					contains: [
+						{ row: [{ affordance: "Bold" }, { affordance: "Italic" }] },
+						{ row: [{ affordance: "Copy" }, { affordance: "Paste" }] },
+					],
+				},
+			],
+			([editor]) => contentsOf(editor),
+		);
+		assert.ok(close(gap, em), String(gap));
+	});
+
+	test("keeps a 1 em gap between a row of buttons and a place beside it in a row", () => {
+		const gap = measuredGap(
+			[
+				{
+					place: "Plot",
+					contains: [
+						{
+							row: [
+								{
+									row: [{ affordance: "Zoom in" }, { affordance: "Zoom out" }],
+								},
+								{ place: "Map" },
+							],
+						},
+					],
+				},
+			],
+			([plot]) => contentsOf(contentsOf(plot)[0]),
 		);
 		assert.ok(close(gap, em), String(gap));
 	});

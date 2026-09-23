@@ -35,8 +35,8 @@ const KAPPA = 0.5523;
 const NESTED_MAX = 16;
 /**
  * How far left of a left edge a direct arrow into it rises or falls: the middle of the gap between two places of a row,
- * or rows (layout's PLACE_GAP). Next to an affordance, the gap is narrower, but that affordance is the arrow's start:
- * halfway to the edge is the middle of that gap.
+ * or rows that hold places (layout's PLACE_GAP). Next to an affordance, or a row of affordances, the gap is narrower,
+ * but the affordance at its end is the arrow's start: halfway to the edge is the middle of that gap.
  */
 const RISE = 0.75;
 /** How far above the bottom corner of its right edge the lowest arrival into a hemmed place is: half a place's padding. */

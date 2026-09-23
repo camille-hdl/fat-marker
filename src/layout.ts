@@ -85,9 +85,12 @@ const HEADING_GAP = 0.8;
 const VARIANT_GAP = 2;
 const SKETCH_HEADING_GAP = 0.7;
 const SKETCH_WRAP_MIN = 24;
-/** Between the contents of a column or of a row, when one of them is an affordance. */
+/** Between the contents of a column or of a row, when one of them is an affordance, or a row of affordances only. */
 const CONTENT_GAP = 1;
-/** Between the contents of a column or of a row that are places or rows: the thick strokes of their frames stay apart. */
+/**
+ * Between the contents of a column or of a row that are places, or rows that hold places: the thick strokes of their
+ * frames stay apart.
+ */
 const PLACE_GAP = 1.5;
 /** Inside a place's frame, around its name and contents. */
 const PLACE_PADDING = 0.9;
@@ -132,7 +135,12 @@ type MeasuredPlace = Size & {
 	contents: Measured[];
 };
 type MeasuredAffordance = Size & { kind: "affordance"; laid: LaidAffordance };
-type MeasuredRow = Size & { kind: "row"; contents: Measured[] };
+/** `holdsPlace`: one of its contents is a place, or a row that holds one. */
+type MeasuredRow = Size & {
+	kind: "row";
+	contents: Measured[];
+	holdsPlace: boolean;
+};
 
 /**
  * Places every element of a fat marker sketch: the top left of the first variant's column at (0, 0), variant names
@@ -316,7 +324,8 @@ function measureRow(row: ModelRow, em: number): MeasuredRow {
 		width += content.width;
 		height = Math.max(height, content.height);
 	}
-	return { kind: "row", contents, width, height };
+	const holdsPlace = contents.some(isPlaceLike);
+	return { kind: "row", contents, width, height, holdsPlace };
 }
 
 /** The size of `contents` stacked in a column, apart: as wide as the widest. */
@@ -339,11 +348,18 @@ function gapsAlong(contents: Measured[], em: number): number {
 	return sum;
 }
 
-/** Between two neighbours of a column or of a row: wider between places and rows than next to an affordance. */
+/**
+ * Between two neighbours of a column or of a row: wider between places, or rows that hold places, than next to an
+ * affordance or a row of affordances.
+ */
 function gapBetween(one: Measured, other: Measured, em: number): number {
-	const nextToAffordance =
-		one.kind === "affordance" || other.kind === "affordance";
-	return (nextToAffordance ? CONTENT_GAP : PLACE_GAP) * em;
+	const placeLike = isPlaceLike(one) && isPlaceLike(other);
+	return (placeLike ? PLACE_GAP : CONTENT_GAP) * em;
+}
+
+/** A place, or a row that holds one: its frames need the wider gap. */
+function isPlaceLike(content: Measured): boolean {
+	return content.kind === "row" ? content.holdsPlace : content.kind === "place";
 }
 
 /**
