@@ -6,12 +6,12 @@
 - affordance: Previous plot
 - affordance: Next plot
 - place: Legend (in Plot map)
-- affordance: Show water taps
+- affordance: Show water taps (in Legend)
 - place: Sidebar
 - affordance: Book a plot
 - place: Filters (in Sidebar)
-- affordance: Sunny plots
-- affordance: Shady plots
+- affordance: Sunny plots (in Filters)
+- affordance: Shady plots (in Filters)
 - affordance: Reset
 - place: Saved searches (in Sidebar)
 - place: Footer

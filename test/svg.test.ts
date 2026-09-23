@@ -131,7 +131,7 @@ describe("renderSvg", () => {
 		);
 	});
 
-	test("describes a nested place with the place it is in, looking through rows", () => {
+	test("describes a nested place, and each affordance of a nested place, with the place it is in, looking through rows", () => {
 		const svg = renderSvg({
 			variants: [
 				{
@@ -168,7 +168,7 @@ describe("renderSvg", () => {
 				"- place: Booking",
 				"- affordance: Confirm",
 				"- place: Options (in Booking)",
-				"- affordance: Share with a neighbour",
+				"- affordance: Share with a neighbour (in Options)",
 				"- affordance: Cancel",
 				"- place: Receipt",
 			].join("\n"),

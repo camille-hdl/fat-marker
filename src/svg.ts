@@ -60,23 +60,26 @@ function describe(layout: Layout): string {
 }
 
 /**
- * Appends to `lines` one line per place and affordance of `contents`, in document order; a nested place says which place
- * it is in.
+ * Appends to `lines` one line per place and affordance of `contents`, in document order. A nested place, and each
+ * affordance of a nested place, says which place it is in, so that an affordance after a nested place is not read as
+ * its own.
  */
 function describeContents(
 	contents: ModelContent[],
 	lines: string[],
 	parent?: ModelPlace,
+	parentIsNested = false,
 ): string[] {
+	const within = parent ? ` (in ${parent.name.text})` : "";
 	for (const content of contents) {
 		if (content.kind === "row") {
-			describeContents(content.contents, lines, parent);
+			describeContents(content.contents, lines, parent, parentIsNested);
 		} else if (content.kind === "affordance") {
-			lines.push(`- affordance: ${content.text.text}`);
+			const suffix = parentIsNested ? within : "";
+			lines.push(`- affordance: ${content.text.text}${suffix}`);
 		} else {
-			const within = parent ? ` (in ${parent.name.text})` : "";
 			lines.push(`- place: ${content.name.text}${within}`);
-			describeContents(content.contents, lines, content);
+			describeContents(content.contents, lines, content, parent !== undefined);
 		}
 	}
 	return lines;
