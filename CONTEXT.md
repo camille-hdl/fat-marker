@@ -74,7 +74,7 @@ A place with something right of it in a row, or inside such a place; the arrows 
 _Avoid_: bordered, blocked
 
 **Band** (of a row):
-The strip at the bottom of a row where the arrows into the right edges of its hemmed places arrive, each at its own height, the rightmost place lowest; the row is taller by 1 em for each of them past the first.
+The strip at the bottom of a row where the arrows into the right edges of its hemmed places arrive, each at its own height, all of them in the order of their lanes, as on one edge; the row is taller by 1 em for each of them past the first.
 _Avoid_: strip, gutter
 
 **Name** (of a place):

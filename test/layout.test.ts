@@ -11,6 +11,7 @@ import {
 	type ModelArrow,
 	type ModelContent,
 	type ModelPlace,
+	type ModelRow,
 	type ModelVariant,
 	readSketch,
 	readTheme,
@@ -638,6 +639,30 @@ function crosses(one: Point[], other: Point[]): boolean {
 	return false;
 }
 
+/**
+ * The row in whose band each hemmed place a row holds, directly or through its rows, gets its arrivals: the outermost
+ * of those rows (spec › Arrow routing). A place is hemmed when it, or a place or row it is in, is not the last content
+ * of a row.
+ */
+function rowBandsOf(variant: ModelVariant): Map<ModelPlace, ModelRow> {
+	const bands = new Map<ModelPlace, ModelRow>();
+	const visit = (contents: ModelContent[], within: boolean, row?: ModelRow) => {
+		for (const [position, content] of contents.entries()) {
+			if (content.kind === "affordance") continue;
+			const hemmed =
+				within || (row !== undefined && position < contents.length - 1);
+			if (content.kind === "row") {
+				visit(content.contents, hemmed, row ?? content);
+				continue;
+			}
+			if (hemmed && row) bands.set(content, row);
+			visit(content.contents, hemmed);
+		}
+	};
+	visit(variant.contents, false);
+	return bands;
+}
+
 /** A name for an arrow in a failure message. */
 const arrowName = ({ arrow }: LaidArrow) =>
 	`${arrow.from.text.text} → ${arrow.to.name.text}`;
@@ -1245,6 +1270,29 @@ const invariants: [string, (sketch: Sketch, laid: Layout) => void][] = [
 							if (level(one) || level(other)) continue;
 							assert.ok(!crosses(approachOf(one), approachOf(other)), what);
 						}
+					}
+				}
+			}
+		},
+	],
+	[
+		"orders the arrivals in the band of a row as on one edge: two arrows into different places of the band never cross after their first turn (arrow invariant 6, decision 39)",
+		(_, laid) => {
+			for (const variant of laid.variants) {
+				const bands = rowBandsOf(variant.variant);
+				const into = variant.arrows.filter(
+					({ arrow, side }) => side === "right" && bands.has(arrow.to),
+				);
+				for (const [i, one] of into.entries()) {
+					for (const other of into.slice(i + 1)) {
+						const [to, otherTo] = [one.arrow.to, other.arrow.to];
+						if (to === otherTo || bands.get(to) !== bands.get(otherTo)) {
+							continue;
+						}
+						assert.ok(
+							!crosses(approachOf(one), approachOf(other)),
+							`${arrowName(one)} and ${arrowName(other)}`,
+						);
 					}
 				}
 			}
@@ -2634,12 +2682,17 @@ describe("layout", () => {
 		}
 	});
 
-	test("anchors the arrivals into the hemmed places of a row in its band, at its bottom: the lowest 0.45 em above it, then every 1 em up, the rightmost place lowest", () => {
+	test("anchors the arrivals into the hemmed places of a row in its band, at its bottom: the lowest 0.45 em above it, then every 1 em up, all of them in the order of their lanes, as on one edge", () => {
 		const [variant] = laidOut({
 			variants: [
 				{
 					variant: "A",
 					contains: [
+						{
+							place: "Menu",
+							contains: [{ affordance: "Open the shed", to: "Shed" }],
+						},
+						{ place: "Hint" },
 						{
 							row: [
 								{
@@ -2669,11 +2722,12 @@ describe("layout", () => {
 		);
 		const lowest = bottom(map.frame) - LOW;
 		const arrows = arrowsOf(variant);
-		// both from below, into Map: the outer lane, Show the map's, highest (decision 28)
+		// from above, highest; then those from below, whatever their places, the outer lane highest (decision 39)
 		for (const [name, place, rank] of [
-			["See the map → Map", map, 1],
-			["Show the map → Map", map, 2],
-			["See the shed → Shed", shed, 0],
+			["Open the shed → Shed", shed, 3],
+			["See the shed → Shed", shed, 2],
+			["Show the map → Map", map, 1],
+			["See the map → Map", map, 0],
 		] as const) {
 			const arrow = arrows.get(name);
 			assert.ok(arrow, name);

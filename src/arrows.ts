@@ -263,11 +263,10 @@ function anchorsOf(
  * the other arrivals on it go at the `topSlots` left of those lanes. The arrivals on a left edge are at the heights of
  * their starts, as near as `levelHeights` allows. Those on a right edge go down every ARRIVAL_STEP from the middle of
  * the name's first line, or evenly down to LOW above the bottom corner of the frame when that would pass it. Those on
- * the right edges of the hemmed places of one anchor in `anchors`, a row's band or a place, go up instead, every
- * ARRIVAL_STEP from LOW above its bottom, or evenly up to the middle of the name's first line: the rightmost place's
- * lowest, each place further left above it, so that an arrow into a place passes above the heads of the places on its
- * right. They go to the arrows of the edge in an order that keeps them from crossing before their heads. Each arrival
- * is ENTRY_DEPTH inside the frame, past its edge.
+ * the right edge of a hemmed place go up instead from the bottom of its anchor in `anchors`, every ARRIVAL_STEP from
+ * LOW above it, or evenly up to the middle of the name's first line; those into the places of the band of one row, all
+ * together, as on one edge. They go to the arrows of the edge, or of the band, in an order that keeps them from
+ * crossing before their heads. Each arrival is ENTRY_DEPTH inside the frame, past its edge.
  */
 function spreadArrivals(
 	variant: ModelVariant,
@@ -293,11 +292,8 @@ function spreadArrivals(
 	const arrivals: Point[] = [];
 	const [depth, step] = [ENTRY_DEPTH * em, ARRIVAL_STEP * em];
 	const laidOf = (place: ModelPlace) => places.get(place) as LaidPlace;
-	/** The right edges spread together: those of the places of one anchor, a row's band or a place alone. */
-	const onRight = new Map<
-		ModelRow | ModelPlace,
-		{ to: ModelPlace; arrows: number[] }[]
-	>();
+	/** The arrows into the right edges spread together, as into one edge: those of the places of one band, or of a place. */
+	const onRight = new Map<ModelRow | ModelPlace, number[]>();
 	/** `arrows` in the order of the `xs` they take, left to right, each on its way down `into` one of them. */
 	const nested = (
 		arrows: number[],
@@ -310,9 +306,7 @@ function spreadArrivals(
 	for (const { to, side, arrows } of edges.values()) {
 		if (side === "right") {
 			const anchor = anchors.get(to) ?? to;
-			const together = onRight.get(anchor) ?? [];
-			together.push({ to, arrows });
-			onRight.set(anchor, together);
+			onRight.set(anchor, [...(onRight.get(anchor) ?? []), ...arrows]);
 			continue;
 		}
 		const { frame } = laidOf(to);
@@ -371,24 +365,21 @@ function spreadArrivals(
 			arrivals[i] = { x: frame.x + depth, y: heights[rank] };
 		}
 	}
-	for (const edges of onRight.values()) {
-		edges.sort(
-			(one, other) => laidOf(one.to).frame.x - laidOf(other.to).frame.x,
-		);
-		const [top, lowest] = sideSpan(laidOf(edges[0].to), em);
-		const count = edges.reduce((sum, { arrows }) => sum + arrows.length, 0);
+	for (const arrows of onRight.values()) {
+		// in the order of their lanes, which is data order
+		arrows.sort((one, other) => one - other);
+		const to = variant.arrows[arrows[0]].to;
+		const [top, lowest] = sideSpan(laidOf(to), em);
+		const count = arrows.length;
 		const spread = count > 1 ? Math.min(step, (lowest - top) / (count - 1)) : 0;
-		const first = anchors.has(edges[0].to)
-			? lowest - (count - 1) * spread
-			: top;
-		let rank = 0;
-		for (const { to, arrows } of edges) {
-			const { frame } = laidOf(to);
-			const x = frame.x + frame.width - depth;
-			const middle = first + (rank + (arrows.length - 1) / 2) * spread;
-			for (const i of laneOrder(arrows, starts, middle)) {
-				arrivals[i] = { x, y: first + rank++ * spread };
-			}
+		const first = anchors.has(to) ? lowest - (count - 1) * spread : top;
+		const middle = first + ((count - 1) / 2) * spread;
+		for (const [rank, i] of laneOrder(arrows, starts, middle).entries()) {
+			const { frame } = laidOf(variant.arrows[i].to);
+			arrivals[i] = {
+				x: frame.x + frame.width - depth,
+				y: first + rank * spread,
+			};
 		}
 	}
 	return arrivals;
