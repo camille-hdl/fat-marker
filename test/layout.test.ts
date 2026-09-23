@@ -1520,7 +1520,7 @@ describe("layout", () => {
 		}
 	};
 
-	test("spreads the arrivals on a top edge at (i + 1)/(n + 1) of its width, the arrow from higher up further right when they all start left of them", () => {
+	test("spreads the arrivals on a top edge at (i + 1)/(n + 1) of its part right of the leftmost start and a turn, when that part is at least 1 em per arrow: each bends like an L, the arrow from higher up further right", () => {
 		const [variant] = laidOut({
 			variants: [
 				{
@@ -1547,12 +1547,49 @@ describe("layout", () => {
 			],
 		}).variants;
 		const { frame } = placeNamed(variant, "Booking");
+		const left = Math.min(...variant.arrows.map(firstPoint).map(({ x }) => x));
+		const part = right(frame) - (left + em);
+		assert.ok(part >= 3 * em);
 		assert.deepEqual(
 			variant.arrows.map((arrow) => [arrow.side, lastPoint(arrow)]),
 			[3, 2, 1].map((i) => [
 				"top",
-				{ x: frame.x + (i * frame.width) / 4, y: frame.y },
+				{ x: left + em + (i * part) / 4, y: frame.y },
 			]),
+		);
+		for (const arrow of variant.arrows) {
+			const [[start, one, other, end]] = arrow.path;
+			const corner = { x: end.x, y: start.y };
+			assert.deepEqual([one, other], [corner, corner], arrowName(arrow));
+		}
+	});
+
+	test("spreads the arrivals on a top edge at (i + 1)/(n + 1) of its whole width when its part right of the leftmost start and a turn is shorter than 1 em per arrow", () => {
+		const [variant] = laidOut({
+			variants: [
+				{
+					variant: "A",
+					contains: [
+						{
+							place: "Plot list",
+							contains: ["Book", "Swap", "Share", "Leave"].map(
+								(affordance) => ({ affordance, to: "Map" }),
+							),
+						},
+						{ row: [{ place: "Map" }, { place: "Shed" }] },
+					],
+				},
+			],
+		}).variants;
+		const { frame } = placeNamed(variant, "Map");
+		const left = Math.min(...variant.arrows.map(firstPoint).map(({ x }) => x));
+		assert.ok(right(frame) - (left + em) < 4 * em);
+		assert.deepEqual(
+			variant.arrows.map(lastPoint).sort((one, other) => one.x - other.x),
+			[1, 2, 3, 4].map((i) => ({
+				x: frame.x + (i * frame.width) / 5,
+				y: frame.y,
+			})),
 		);
 	});
 

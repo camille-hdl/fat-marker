@@ -108,7 +108,7 @@ B · Inline booking
 </g>
 </g>
 <g class="halo">
-  <path d="M151.6,122.4 C168.1,123.5 166.9,164.8 166.8,218.2" fill="none" stroke="#fff1e5" stroke-width="9.0" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M151.6,122.4 C248.4,123.6 251.5,122.5 251.5,218.2" fill="none" stroke="#fff1e5" stroke-width="9.0" stroke-linecap="round" stroke-linejoin="round"/>
 </g>
 <g class="halo">
   <path d="M143.9,174.6 C256.1,178.1 347.5,182.0 349.7,192.6 C349.8,408.7 350.2,621.5 349.7,833.6 C351.5,838.6 346.7,846.1 340.4,849.6" fill="none" stroke="#fff1e5" stroke-width="9.0" stroke-linecap="round" stroke-linejoin="round"/>
@@ -117,7 +117,7 @@ B · Inline booking
   <path d="M203.0,399.6 C225.0,398.6 227.8,332.7 233.5,312.0" fill="none" stroke="#fff1e5" stroke-width="9.0" stroke-linecap="round" stroke-linejoin="round"/>
 </g>
 <g class="halo">
-  <path d="M116.8,468.9 C167.8,465.6 166.8,468.7 166.7,566.5" fill="none" stroke="#fff1e5" stroke-width="9.0" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M116.8,468.9 C233.7,465.6 234.2,468.7 234.1,566.5" fill="none" stroke="#fff1e5" stroke-width="9.0" stroke-linecap="round" stroke-linejoin="round"/>
 </g>
 <g class="halo">
   <path d="M116.8,468.9 C254.4,469.5 358.4,478.7 360.5,486.9 C362.1,575.6 362.9,667.2 360.5,758.5 C358.6,765.9 351.5,773.4 340.6,775.7" fill="none" stroke="#fff1e5" stroke-width="9.0" stroke-linecap="round" stroke-linejoin="round"/>
@@ -132,10 +132,10 @@ B · Inline booking
   <path d="M216.0,696.1 C312.7,699.4 393.8,688.3 392.9,678.1 C394.7,465.3 391.1,259.3 392.9,46.6 C389.8,36.9 369.7,29.7 340.7,28.7" fill="none" stroke="#fff1e5" stroke-width="9.0" stroke-linecap="round" stroke-linejoin="round"/>
 </g>
 <g class="halo">
-  <path d="M577.8,63.0 C595.4,65.2 593.8,73.0 592.9,85.1" fill="none" stroke="#fff1e5" stroke-width="9.0" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M577.8,63.0 C659.9,65.4 665.0,63.4 665.2,85.0" fill="none" stroke="#fff1e5" stroke-width="9.0" stroke-linecap="round" stroke-linejoin="round"/>
 </g>
 <g class="halo">
-  <path d="M567.3,202.1 C594.7,202.0 592.7,202.0 592.6,262.8" fill="none" stroke="#fff1e5" stroke-width="9.0" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M567.3,202.1 C667.5,202.0 668.2,202.0 668.1,262.8" fill="none" stroke="#fff1e5" stroke-width="9.0" stroke-linecap="round" stroke-linejoin="round"/>
 </g>
 <g class="text">
 <text text-anchor="start" font-family="'Atkinson Hyperlegible Next', Avenir, 'Segoe UI', Seravek, Ubuntu, Calibri, 'DejaVu Sans', sans-serif" font-size="25.2" font-weight="700" fill="#262a33"><tspan x="0.0" y="-52.8">A · Separate booking</tspan><tspan x="0.0" y="-21.3">screen</tspan></text>
@@ -166,7 +166,7 @@ B · Inline booking
 <text text-anchor="start" font-family="'Atkinson Hyperlegible Next', Avenir, 'Segoe UI', Seravek, Ubuntu, Calibri, 'DejaVu Sans', sans-serif" font-size="19.8" font-weight="700" fill="#262a33"><tspan x="450.5" y="305.5">Receipt</tspan></text>
 </g>
 <g class="arrow">
-  <path d="M151.6,122.4 C168.8,123.6 166.7,168.5 166.7,225.5 M173.5,212.7 L166.7,225.5 L160.4,212.5" fill="none" stroke="#0f5499" stroke-width="2.9" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M151.6,122.4 C250.8,123.6 251.5,122.4 251.5,225.5 M258.3,212.7 L251.5,225.5 L245.2,212.5" fill="none" stroke="#0f5499" stroke-width="2.9" stroke-linecap="round" stroke-linejoin="round"/>
 </g>
 <g class="arrow">
   <path d="M143.9,174.6 C256.1,178.1 347.5,182.0 349.7,192.6 C349.8,408.7 350.2,621.5 349.7,833.6 C352.2,840.3 342.4,851.6 333.5,851.6 M345.9,858.9 L333.5,851.6 L346.2,844.8" fill="none" stroke="#0f5499" stroke-width="2.9" stroke-linecap="round" stroke-linejoin="round"/>
@@ -175,7 +175,7 @@ B · Inline booking
   <path d="M203.0,399.6 C229.1,398.4 228.2,305.8 237.2,305.8 M224.7,298.6 L237.2,305.8 L224.3,312.2" fill="none" stroke="#0f5499" stroke-width="2.9" stroke-linecap="round" stroke-linejoin="round"/>
 </g>
 <g class="arrow">
-  <path d="M116.8,468.9 C169.1,465.5 166.7,468.9 166.7,573.8 M173.9,561.2 L166.7,573.8 L159.3,561.4" fill="none" stroke="#0f5499" stroke-width="2.9" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M116.8,468.9 C236.5,465.5 234.1,468.9 234.1,573.8 M241.3,561.2 L234.1,573.8 L226.8,561.4" fill="none" stroke="#0f5499" stroke-width="2.9" stroke-linecap="round" stroke-linejoin="round"/>
 </g>
 <g class="arrow">
   <path d="M116.8,468.9 C254.4,469.5 358.4,478.7 360.5,486.9 C362.1,575.6 362.9,667.2 360.5,758.5 C358.2,767.5 348.4,776.5 333.5,776.5 M346.4,782.8 L333.5,776.5 L346.4,770.1" fill="none" stroke="#0f5499" stroke-width="2.9" stroke-linecap="round" stroke-linejoin="round"/>
@@ -190,9 +190,9 @@ B · Inline booking
   <path d="M216.0,696.1 C312.7,699.4 393.8,688.3 392.9,678.1 C394.7,465.3 391.1,259.3 392.9,46.6 C389.6,36.1 366.3,28.6 333.5,28.6 M346.1,35.5 L333.5,28.6 L345.8,21.1" fill="none" stroke="#0f5499" stroke-width="2.9" stroke-linecap="round" stroke-linejoin="round"/>
 </g>
 <g class="arrow">
-  <path d="M577.8,63.0 C598.7,65.6 592.6,76.1 592.6,92.3 M599.9,79.8 L592.6,92.3 L585.8,79.5" fill="none" stroke="#0f5499" stroke-width="2.9" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M577.8,63.0 C668.1,65.6 665.2,63.0 665.2,92.3 M672.5,79.8 L665.2,92.3 L658.4,79.5" fill="none" stroke="#0f5499" stroke-width="2.9" stroke-linecap="round" stroke-linejoin="round"/>
 </g>
 <g class="arrow">
-  <path d="M567.3,202.1 C595.8,202.0 592.6,202.1 592.6,270.0 M598.9,257.1 L592.6,270.0 L585.4,257.5" fill="none" stroke="#0f5499" stroke-width="2.9" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M567.3,202.1 C671.3,202.0 668.1,202.1 668.1,270.0 M674.4,257.1 L668.1,270.0 L661.0,257.5" fill="none" stroke="#0f5499" stroke-width="2.9" stroke-linecap="round" stroke-linejoin="round"/>
 </g>
 </svg>

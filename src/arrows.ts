@@ -154,7 +154,7 @@ function hemmedOf(variant: ModelVariant): Set<ModelPlace> {
 
 /**
  * Where each arrow of `variant`, from its start in `starts`, reaches the `sides` of its target, in data order. The
- * arrivals on one top edge go at (i + 1)/(n + 1) of its width, and those on one side edge down every ARRIVAL_STEP
+ * arrivals on one top edge go at the `topSlots`, and those on one side edge down every ARRIVAL_STEP
  * from the middle of the name's first line, or evenly down to the bottom corner of the frame when that would pass it.
  * On the right edge of a `hemmed` place, they go up instead, every ARRIVAL_STEP from LOW above the bottom corner, or
  * evenly up to the middle of the name's first line. They go to the arrows of the edge in an order that keeps them from
@@ -183,9 +183,7 @@ function spreadArrivals(
 	for (const { to, side, arrows } of edges.values()) {
 		const { frame, name } = places.get(to) as LaidPlace;
 		if (side === "top") {
-			const slots = arrows.map(
-				(_, i) => frame.x + ((i + 1) * frame.width) / (arrows.length + 1),
-			);
+			const slots = topSlots(frame, arrows, starts, em);
 			const order =
 				arrows.length > NESTED_MAX
 					? [...arrows].sort((one, other) => starts[other].y - starts[one].y)
@@ -216,6 +214,30 @@ function spreadArrivals(
 		}
 	}
 	return arrivals;
+}
+
+/**
+ * Where the `arrows` into the top edge of `frame` reach it, left to right: at (i + 1)/(n + 1) of its part right of the
+ * leftmost start and a turn, where each of them bends like an L, when that part is at least 1 em per arrow; otherwise,
+ * of its whole width.
+ */
+function topSlots(
+	frame: Box,
+	arrows: number[],
+	starts: Point[],
+	em: number,
+): number[] {
+	const right = frame.x + frame.width;
+	const leftmost = arrows.reduce(
+		(furthest, i) => Math.min(furthest, starts[i].x),
+		Infinity,
+	);
+	const turned = leftmost + TURN_RADIUS * em;
+	const left =
+		right - turned >= arrows.length * em ? Math.max(frame.x, turned) : frame.x;
+	return arrows.map(
+		(_, i) => left + ((i + 1) * (right - left)) / (arrows.length + 1),
+	);
 }
 
 /**
