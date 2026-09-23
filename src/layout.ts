@@ -94,8 +94,11 @@ const CONTENT_GAP = 1;
  * frames stay apart.
  */
 const PLACE_GAP = 1.5;
-/** Inside a place's frame, around its name and contents. */
-const PLACE_PADDING = 0.9;
+/**
+ * Inside a place's frame, around its name and contents: it holds an arrow's whole head, its tip ENTRY_DEPTH (0.8 em)
+ * inside the frame, with 0.27 em clear before the contents.
+ */
+const PLACE_PADDING = 1.15;
 /** Between a place's name and its contents. */
 const NAME_GAP = 0.6;
 const BUTTON_PADDING_X = 0.6;

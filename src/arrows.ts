@@ -39,7 +39,10 @@ const NESTED_MAX = 16;
  * but the affordance at its end is the arrow's start: halfway to the edge is the middle of that gap.
  */
 const RISE = 0.75;
-/** How far above the bottom corner of its right edge the lowest arrival into a hemmed place is: half a place's padding. */
+/**
+ * How far above the bottom corner of its right edge the lowest arrival into a hemmed place is: in its padding, below
+ * its contents.
+ */
 const LOW = 0.45;
 /** How far inside its target's frame an arrow ends, past the edge it reaches, so that its head reads as entering. */
 const ENTRY_DEPTH = 0.8;
