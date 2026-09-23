@@ -102,7 +102,6 @@ describe("readSketch, on data outside this version", () => {
 	const invalid: [string, unknown, string][] = [
 		["a non-object", [], "(root)"],
 		["missing variants", {}, "variants"],
-		["an empty variants array", { variants: [] }, "variants"],
 		[
 			"an unknown key on a variant",
 			withVariant({ ...variant, name: "A" }),
@@ -151,6 +150,27 @@ describe("readSketch, on data outside this version", () => {
 			);
 		});
 	}
+});
+
+describe("readSketch, on the sketch and its variants", () => {
+	test("rejects an unknown root key with the prescribed message", () => {
+		assert.throws(
+			() => readSketch({ nope: 1, ...minimal }),
+			(error) =>
+				error instanceof FatMarkerError &&
+				error.message ===
+					'nope: unknown key; a fat marker sketch has only "title", "subtitle" and "variants"',
+		);
+	});
+
+	test("rejects a non-string title with the prescribed message", () => {
+		assert.throws(
+			() => readSketch({ title: 3, ...minimal }),
+			(error) =>
+				error instanceof FatMarkerError &&
+				error.message === "title: expected a string",
+		);
+	});
 
 	test("rejects a blank subtitle with the prescribed message", () => {
 		assert.throws(

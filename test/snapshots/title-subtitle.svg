@@ -9,8 +9,8 @@ B · Inline booking
 - place: Plot list
 - affordance: Choose a plot</desc>
 <rect x="-18.0" y="-180.0" width="543.0" height="302.0" fill="#fff1e5"/>
-<text text-anchor="middle" font-family="'Atkinson Hyperlegible Next', Avenir, 'Segoe UI', Seravek, Ubuntu, Calibri, 'DejaVu Sans', sans-serif" font-size="28.8" font-weight="700" fill="#262a33"><tspan x="253.2" y="-133.0">Plot booking</tspan></text>
-<text text-anchor="middle" font-family="'Atkinson Hyperlegible Next', Avenir, 'Segoe UI', Seravek, Ubuntu, Calibri, 'DejaVu Sans', sans-serif" font-size="18.0" font-weight="600" fill="#6b6259"><tspan x="253.2" y="-95.0">Week 3 · Shape review</tspan></text>
+<text text-anchor="start" font-family="'Atkinson Hyperlegible Next', Avenir, 'Segoe UI', Seravek, Ubuntu, Calibri, 'DejaVu Sans', sans-serif" font-size="28.8" font-weight="700" fill="#262a33"><tspan x="0.0" y="-133.0">Plot booking</tspan></text>
+<text text-anchor="start" font-family="'Atkinson Hyperlegible Next', Avenir, 'Segoe UI', Seravek, Ubuntu, Calibri, 'DejaVu Sans', sans-serif" font-size="18.0" font-weight="600" fill="#6b6259"><tspan x="0.0" y="-95.0">Week 3 · Shape review</tspan></text>
 <g class="variant">
 <text text-anchor="start" font-family="'Atkinson Hyperlegible Next', Avenir, 'Segoe UI', Seravek, Ubuntu, Calibri, 'DejaVu Sans', sans-serif" font-size="25.2" font-weight="700" fill="#262a33"><tspan x="0.0" y="-52.8">A · Separate</tspan><tspan x="0.0" y="-21.3">booking screen</tspan></text>
 <g class="place">

@@ -82,7 +82,14 @@ describe("renderSvg", () => {
 			].join("\n"),
 		);
 		assert.equal((svg.match(/<g class="variant">/g) ?? []).length, 2);
-		assert.ok(svg.indexOf('fill="#262a33"') < svg.indexOf('fill="#6b6259"'));
+		const titleText = svg.match(
+			/<text ([^>]*)><tspan [^>]*>Plot booking<\/tspan><\/text>/,
+		);
+		const subtitleText = svg.match(
+			/<text ([^>]*)><tspan [^>]*>Week 3 · Shape review<\/tspan><\/text>/,
+		);
+		assert.match(titleText?.[1] ?? "", /fill="#262a33"/);
+		assert.match(subtitleText?.[1] ?? "", /fill="#6b6259"/);
 	});
 
 	test("describes the variant, then its places and affordances in document order", () => {

@@ -26,6 +26,8 @@ const GAP = 0.25 * em;
 const MARGIN = 0.5 * em;
 /** Button labels wrap at this width. */
 const LABEL_WRAP = 12 * em;
+const NAME_WRAP_MIN = 12 * em;
+const SKETCH_WRAP_MIN = 24 * em;
 
 function fixture(name: string): Sketch {
 	const url = new URL(`fixtures/${name}.json`, import.meta.url);
@@ -74,6 +76,20 @@ const sketches: Record<string, Sketch> = {
 			},
 		],
 	},
+	"long headings and variant names": {
+		title:
+			"A long sketch title that must wrap across several lines to remain within the minimum heading width",
+		subtitle:
+			"A supporting subtitle that also wraps across several lines so its width rule is exercised directly",
+		variants: [
+			{
+				variant:
+					"A deliberately long variant name that wraps onto multiple lines beside a short name",
+				contains: [{ place: "A" }],
+			},
+			{ variant: "B", contains: [{ place: "B" }] },
+		],
+	},
 };
 
 function laidOut(sketch: Sketch): Layout {
@@ -98,16 +114,20 @@ const bottom = (box: Box) => box.y + box.height;
 
 /** Every text block of `laid`, with the box that carries it. */
 function textBlocks(laid: Layout): { block: TextBlock; carrier: Box }[] {
-	return laid.variants.flatMap(({ heading, area, items }) => [
-		{ block: heading, carrier: area },
-		...items.flatMap((item) =>
-			item.kind === "place"
-				? [{ block: item.name, carrier: item.frame }]
-				: item.label
-					? [{ block: item.label, carrier: item.box }]
-					: [],
-		),
-	]);
+	return [
+		...(laid.title ? [{ block: laid.title, carrier: laid.viewBox }] : []),
+		...(laid.subtitle ? [{ block: laid.subtitle, carrier: laid.viewBox }] : []),
+		...laid.variants.flatMap(({ heading, area, items }) => [
+			{ block: heading, carrier: area },
+			...items.flatMap((item) =>
+				item.kind === "place"
+					? [{ block: item.name, carrier: item.frame }]
+					: item.label
+						? [{ block: item.label, carrier: item.box }]
+						: [],
+			),
+		]),
+	];
 }
 
 /** The items laid out for the contents of `place`, in data order. */
@@ -138,7 +158,9 @@ for (const [name, sketch] of Object.entries(sketches)) {
 				assert.equal(laid.variants[i].column.y, 0);
 				if (i > 0) {
 					assert.ok(
-						laid.variants[i - 1].area.x + laid.variants[i - 1].area.width <
+						laid.variants[i - 1].area.x +
+							laid.variants[i - 1].area.width +
+							GAP <=
 							laid.variants[i].area.x,
 					);
 				}
@@ -200,7 +222,7 @@ for (const [name, sketch] of Object.entries(sketches)) {
 			}
 		});
 
-		test("wraps labels at 12 em, except a single word, and keeps every text block inside its box (invariant 4)", () => {
+		test("wraps names and sketch headings at their specified widths and keeps every text block inside its box (invariant 4)", () => {
 			for (const { block, carrier } of textBlocks(laid)) {
 				assert.ok(inside(block.box, carrier), block.lines.join(" "));
 				assert.equal(block.box.height, block.lines.length * block.lineHeight);
@@ -212,6 +234,13 @@ for (const [name, sketch] of Object.entries(sketches)) {
 				}
 			}
 			for (const variant of laid.variants) {
+				for (const line of variant.heading.lines) {
+					assert.ok(
+						measure(line, variant.heading.weight, variant.heading.size) <=
+							Math.max(variant.column.width, NAME_WRAP_MIN),
+						line,
+					);
+				}
 				for (const item of variant.items) {
 					if (item.kind !== "affordance" || !item.label) continue;
 					for (const line of item.label.lines) {
@@ -220,6 +249,19 @@ for (const [name, sketch] of Object.entries(sketches)) {
 							line,
 						);
 					}
+				}
+			}
+			const lastVariant = laid.variants.at(-1);
+			assert.ok(lastVariant);
+			const sketchWidth = lastVariant.area.x + lastVariant.area.width;
+			for (const block of [laid.title, laid.subtitle]) {
+				if (!block) continue;
+				for (const line of block.lines) {
+					assert.ok(
+						measure(line, block.weight, block.size) <=
+							Math.max(sketchWidth, SKETCH_WRAP_MIN * em),
+						line,
+					);
 				}
 			}
 		});
@@ -272,6 +314,27 @@ describe("layout of buttons", () => {
 	});
 });
 
+test("wraps long sketch headings and aligns variant names on a shared baseline", () => {
+	const laid = laidOut(sketches["long headings and variant names"]);
+	assert.ok(laid.title && laid.title.lines.length > 1);
+	assert.ok(laid.subtitle && laid.subtitle.lines.length > 1);
+	assert.notEqual(
+		laid.variants[0].heading.lines.length,
+		laid.variants[1].heading.lines.length,
+	);
+	assert.equal(
+		Math.abs(
+			bottom(laid.variants[0].heading.box) -
+				bottom(laid.variants[1].heading.box),
+		) < EPSILON,
+		true,
+	);
+	assert.deepEqual(
+		[laid.title.anchor, laid.title.x, laid.subtitle.anchor, laid.subtitle.x],
+		["start", 0, "start", 0],
+	);
+});
+
 test("variant independence: changing variant A only translates variant B horizontally (invariant 7)", () => {
 	const original = fixture("title-subtitle");
 	const before = laidOut(original);
@@ -289,8 +352,17 @@ test("variant independence: changing variant A only translates variant B horizon
 	const afterB = changed.variants[1];
 	const shift = afterB.column.x - beforeB.column.x;
 	assert.ok(shift > 0);
-	const localGeometry = (variant: Layout["variants"][number]) =>
-		variant.items.map((item) =>
+	const localGeometry = (variant: Layout["variants"][number]) => ({
+		heading: {
+			x: variant.heading.x - variant.column.x,
+			baseline: variant.heading.baseline,
+			box: {
+				...variant.heading.box,
+				x: variant.heading.box.x - variant.column.x,
+			},
+			lines: variant.heading.lines,
+		},
+		items: variant.items.map((item) =>
 			item.kind === "place"
 				? {
 						kind: item.kind,
@@ -313,7 +385,8 @@ test("variant independence: changing variant A only translates variant B horizon
 							},
 						},
 					},
-		);
+		),
+	});
 	const rounded = (value: unknown) =>
 		JSON.parse(
 			JSON.stringify(value, (_key, item: unknown) =>

@@ -23,11 +23,7 @@ export function toSvg(layout: Layout, theme: Theme): string {
 		`<svg xmlns="http://www.w3.org/2000/svg" viewBox="${x} ${y} ${width} ${height}" width="${width}" height="${height}" role="img">`,
 		`<title>${escapeXml(title?.lines.join(" ") ?? "Fat marker sketch")}</title>`,
 		`<desc>${escapeXml(describe(layout))}</desc>`,
-		...(theme.background === "transparent"
-			? []
-			: [
-					`<rect x="${x}" y="${y}" width="${width}" height="${height}" fill="${theme.background}"/>`,
-				]),
+		`<rect x="${x}" y="${y}" width="${width}" height="${height}" fill="${theme.background}"/>`,
 		...(title ? [text(title, theme.ink)] : []),
 		...(subtitle ? [text(subtitle, theme.muted)] : []),
 		...layout.variants.map(({ heading, items }) =>
@@ -64,9 +60,10 @@ function describe(layout: Layout): string {
 			].join("\n"),
 		)
 		.join("\n\n");
-	return [layout.subtitle?.lines.join(" "), variants]
-		.filter((part) => part !== undefined && part !== "")
-		.join("\n");
+	return [
+		...(layout.subtitle ? [layout.subtitle.lines.join(" ")] : []),
+		variants,
+	].join("\n");
 }
 
 /** A place's frame, in four strokes, and its name. */

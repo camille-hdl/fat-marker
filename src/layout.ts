@@ -1,5 +1,5 @@
 // from @camille-hdl/hill-chart@0.2.0, 738a559
-// functions textBlock (+ anchor "middle", + field), boundingBox, grow, roundOutward, smallest and largest; the rest is new
+// functions textBlock (+ anchor "middle", + field), boundingBox, grow, roundOutward, smallest and largest; placeHeading as sketchText (+ wrapping). The rest is new.
 import { measure, type Weight, wrap } from "./font.ts";
 import type {
 	Model,
@@ -7,6 +7,7 @@ import type {
 	ModelArrow,
 	ModelPlace,
 	ModelVariant,
+	Text,
 	Theme,
 } from "./input.ts";
 
@@ -73,6 +74,8 @@ const SUBTITLE_SIZE = 1;
 const PLACE_NAME_SIZE = 1.1;
 /** Button labels wrap at this width. */
 const LABEL_WRAP = 12;
+/** Variant names wrap at this width when their column is narrower. */
+const NAME_WRAP_MIN = 12;
 /** Between a variant's name and its column. */
 const HEADING_GAP = 0.8;
 const VARIANT_GAP = 2;
@@ -110,17 +113,16 @@ export function layout(model: Model, theme: Theme): Layout {
 		return translated;
 	});
 	const sketchWidth = x - VARIANT_GAP * em;
-	const widestName = smallest(variants.map(({ heading }) => heading.box.y));
-	let headerBottom = widestName - SKETCH_HEADING_GAP * em;
+	const namesTop = smallest(variants.map(({ heading }) => heading.box.y));
+	let headerBottom = namesTop - SKETCH_HEADING_GAP * em;
 	const headerWidth = Math.max(sketchWidth, SKETCH_WRAP_MIN * em);
-	const center = sketchWidth / 2;
 	const subtitle = model.subtitle
 		? sketchText(
 				model.subtitle,
 				SUBTITLE_SIZE * em,
 				600,
 				headerWidth,
-				center,
+				0,
 				headerBottom,
 			)
 		: undefined;
@@ -131,7 +133,7 @@ export function layout(model: Model, theme: Theme): Layout {
 				TITLE_SIZE * em,
 				700,
 				headerWidth,
-				center,
+				0,
 				headerBottom,
 			)
 		: undefined;
@@ -161,7 +163,12 @@ function placeVariant(variant: ModelVariant, em: number): LaidVariant {
 	}
 	const column = { x: 0, y: 0, width, height: y - CONTENT_GAP * em };
 	const size = VARIANT_NAME_SIZE * em;
-	const lines = wrap(variant.name.text, Math.max(width, 12 * em), 700, size);
+	const lines = wrap(
+		variant.name.text,
+		Math.max(width, NAME_WRAP_MIN * em),
+		700,
+		size,
+	);
 	const heading = textBlock(
 		lines,
 		700,
@@ -181,13 +188,13 @@ function placeVariant(variant: ModelVariant, em: number): LaidVariant {
 	};
 }
 
-/** Places an optional sketch heading, centered and bottom-aligned at `bottom`. */
+/** Places an optional sketch heading, left-aligned and bottom-aligned at `bottom`. */
 function sketchText(
-	text: { text: string; field: string },
+	text: Text,
 	size: number,
 	weight: Weight,
 	width: number,
-	center: number,
+	x: number,
 	bottom: number,
 ): TextBlock {
 	const lines = wrap(text.text, width, weight, size);
@@ -195,8 +202,8 @@ function sketchText(
 		lines,
 		weight,
 		size,
-		"middle",
-		center,
+		"start",
+		x,
 		bottom - (lines.length * LINE_HEIGHT * size) / 2,
 		text.field,
 	);
@@ -204,8 +211,7 @@ function sketchText(
 
 /** Moves one complete variant horizontally without changing any of its local geometry. */
 function moveVariant(variant: LaidVariant, x: number): LaidVariant {
-	if (x === 0) return variant;
-	const dx = x - variant.column.x;
+	const dx = x;
 	return {
 		...variant,
 		heading: moveBy(variant.heading, dx, 0),
