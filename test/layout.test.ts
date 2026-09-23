@@ -379,6 +379,20 @@ const pointsOf = ({ path }: LaidArrow) => path.flat();
 const firstPoint = ({ path }: LaidArrow) => path[0][0];
 const lastPoint = ({ path }: LaidArrow) => path[path.length - 1][3];
 
+/**
+ * The `x` of a corridor arrow's lane: that of its vertical run, or of both inner control points of a single cubic,
+ * which the lane holds.
+ */
+function laneOf({ path }: LaidArrow): number {
+	const onLane = path.length === 3 ? path[1] : path[0].slice(1, 3);
+	const [{ x }] = onLane;
+	assert.ok(
+		onLane.every((point) => close(point.x, x)),
+		"not on one lane",
+	);
+	return x;
+}
+
 /** A name for an arrow in a failure message. */
 const arrowName = ({ arrow }: LaidArrow) =>
 	`${arrow.from.text.text} → ${arrow.to.name.text}`;
@@ -825,21 +839,14 @@ const invariants: [string, (sketch: Sketch, laid: Layout) => void][] = [
 		(_, laid) => {
 			for (const variant of laid.variants) {
 				const corridor = variant.arrows.filter(({ side }) => side === "right");
-				// An arrow's lane is its rightmost point: the vertical run, or both control points of a single cubic, follow it.
-				const lanes = corridor.map((laidArrow) =>
-					pointsOf(laidArrow).reduce(
-						(x, point) => Math.max(x, point.x),
-						-Infinity,
-					),
-				);
+				const lanes = corridor.map(laneOf);
 				for (const [k, lane] of lanes.entries()) {
 					const what = arrowName(corridor[k]);
 					assert.ok(lane > right(variant.column) + GAP, what);
 					if (k > 0) assert.ok(close(lane - lanes[k - 1], LANE), what);
-					const onLane = pointsOf(corridor[k]).filter(({ x }) =>
-						close(x, lane),
-					);
-					assert.ok(onLane.length >= 2, what);
+					for (const point of pointsOf(corridor[k])) {
+						assert.ok(point.x <= lane + EPSILON, what);
+					}
 				}
 			}
 		},
