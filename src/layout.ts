@@ -78,8 +78,10 @@ const SUBTITLE_SIZE = 1;
 const PLACE_NAME_SIZE = 1.1;
 /** Button labels wrap at this width. */
 const LABEL_WRAP = 12;
-/** Variant and place names wrap at this width when their contents are narrower. */
+/** Place names wrap at this width when their contents are narrower. */
 const NAME_WRAP_MIN = 12;
+/** Variant names wrap at this width when their column and corridor are narrower, so that a usual name stays on one line. */
+const VARIANT_NAME_WRAP_MIN = 20;
 /** Between a variant's name and its column. */
 const HEADING_GAP = 0.8;
 const VARIANT_GAP = 2;
@@ -205,8 +207,14 @@ function placeVariant(variant: ModelVariant, em: number): LaidVariant {
 	const items: LaidVariant["items"] = [];
 	placeColumn(contents, { x: 0, y: 0, width }, em, items);
 	const column = { x: 0, y: 0, width, height };
+	const { arrows, corridor } = routeArrows(variant, column, items, em);
 	const size = VARIANT_NAME_SIZE * em;
-	const lines = wrap(variant.name.text, nameWrap(width, em), 700, size);
+	const lines = wrap(
+		variant.name.text,
+		nameWrap(width + corridor, em, VARIANT_NAME_WRAP_MIN),
+		700,
+		size,
+	);
 	const heading = textBlock(
 		lines,
 		700,
@@ -216,7 +224,6 @@ function placeVariant(variant: ModelVariant, em: number): LaidVariant {
 		-HEADING_GAP * em - (lines.length * LINE_HEIGHT * size) / 2,
 		variant.name.field,
 	);
-	const { arrows, corridor } = routeArrows(variant, column, items, em);
 	return {
 		variant,
 		heading,
@@ -308,11 +315,15 @@ function measurePlace(place: ModelPlace, em: number): MeasuredPlace {
 }
 
 /**
- * The width a name wraps at, over contents `width` wide: 12 em, or wider contents, so that the name's box, with its
- * room, does not widen them.
+ * The width a name wraps at, over contents `width` wide: `minimumEm`, or wider contents, so its box with its room does
+ * not widen them.
  */
-function nameWrap(width: number, em: number): number {
-	return Math.max(width / TEXT_ROOM, NAME_WRAP_MIN * em);
+function nameWrap(
+	width: number,
+	em: number,
+	minimumEm = NAME_WRAP_MIN,
+): number {
+	return Math.max(width / TEXT_ROOM, minimumEm * em);
 }
 
 /** A row: its contents side by side, apart, as tall as the tallest. */

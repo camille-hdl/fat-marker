@@ -33,6 +33,8 @@ const GAP = 0.25 * em;
 /** Between two neighbours of a column or of a row when one of them is an affordance, and when neither is. */
 const CONTENT_GAP = 1 * em;
 const PLACE_GAP = 1.5 * em;
+const CORRIDOR_GAP = 0.6 * em;
+const VARIANT_GAP = 2 * em;
 /** Between two lanes of a corridor. */
 const LANE = 0.6 * em;
 /** Between two arrivals on a side edge, when it is tall enough. */
@@ -42,6 +44,8 @@ const MARGIN = 0.5 * em;
 /** Button labels wrap at this width. */
 const LABEL_WRAP = 12 * em;
 const NAME_WRAP_MIN = 12 * em;
+const VARIANT_NAME_WRAP_MIN = 20 * em;
+const TEXT_ROOM = 1.2;
 const SKETCH_WRAP_MIN = 24 * em;
 
 type LaidVariant = Layout["variants"][number];
@@ -763,11 +767,16 @@ const invariants: [string, (sketch: Sketch, laid: Layout) => void][] = [
 					carrier: variant.area,
 					text: variant.variant.name.text,
 				});
+				const lanes = variant.arrows.filter(
+					({ side }) => side === "right",
+				).length;
+				const corridor = lanes === 0 ? 0 : CORRIDOR_GAP + lanes * LANE;
+				const wrapWidth = Math.max(
+					(variant.column.width + corridor) / TEXT_ROOM,
+					VARIANT_NAME_WRAP_MIN,
+				);
 				for (const line of heading.lines) {
-					assert.ok(
-						fits(line, heading, Math.max(variant.column.width, NAME_WRAP_MIN)),
-						line,
-					);
+					assert.ok(fits(line, heading, wrapWidth), line);
 				}
 				for (const item of variant.items) {
 					if (item.kind === "place") {
@@ -1118,6 +1127,57 @@ describe("layout of 200 random sketches", () => {
 });
 
 describe("layout", () => {
+	test("variant name stays on one line above a narrow column", () => {
+		const laid = laidOut({
+			variants: [
+				{
+					variant: "A · Three guided steps",
+					contains: [{ place: "Start", contains: [{ affordance: "Go" }] }],
+				},
+			],
+		});
+		const [{ heading, column }] = laid.variants;
+		assert.ok(
+			Math.abs(measure(heading.lines[0], 700, heading.size) / em - 14.9) < 0.1,
+		);
+		assert.equal(heading.lines.length, 1);
+		assert.ok(column.width < VARIANT_NAME_WRAP_MIN);
+	});
+
+	test("variant name wraps at 20 em and every line fits its wrap width", () => {
+		const name = Array.from({ length: 40 }, (_, index) => `word${index}`).join(
+			" ",
+		);
+		const [{ heading, column }] = laidOut({
+			variants: [{ variant: name, contains: [{ place: "Start" }] }],
+		}).variants;
+		assert.ok(heading.lines.length > 1);
+		const wrapWidth = Math.max(column.width / TEXT_ROOM, VARIANT_NAME_WRAP_MIN);
+		for (const line of heading.lines) {
+			assert.ok(measure(line, 700, heading.size) <= wrapWidth, line);
+		}
+		assert.ok(
+			heading.lines.some(
+				(line) => measure(line, 700, heading.size) > NAME_WRAP_MIN,
+			),
+		);
+	});
+
+	test("next variant starts VARIANT_GAP after a widened variant name area", () => {
+		const [first, second] = laidOut({
+			variants: [
+				{
+					variant: "A · Three guided steps",
+					contains: [{ place: "Start", contains: [{ affordance: "Go" }] }],
+				},
+				{ variant: "B", contains: [{ place: "End" }] },
+			],
+		}).variants;
+		assert.equal(first.heading.lines.length, 1);
+		assert.ok(close(right(first.area), right(first.heading.box)));
+		assert.ok(close(second.column.x, right(first.area) + VARIANT_GAP));
+	});
+
 	test("puts the first column's top left at (0, 0)", () => {
 		for (const [, sketch] of named) {
 			const { column } = laidOut(sketch).variants[0];
@@ -1491,6 +1551,7 @@ describe("layout", () => {
 
 	test("variant independence: changing variant A only translates variant B horizontally (invariant 7)", () => {
 		const original = fixture("title-subtitle");
+		original.variants[0].variant = "A";
 		const before = laidOut(original);
 		const changed = laidOut({
 			...original,
