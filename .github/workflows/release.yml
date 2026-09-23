@@ -1,0 +1,133 @@
+# npmjs.com's trusted publisher names this file: rename it there too.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions: {}
+
+jobs:
+  build:
+    name: Build ${{ github.ref_name }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      name: ${{ steps.pack.outputs.name }}
+      version: ${{ steps.pack.outputs.version }}
+      tarball: ${{ steps.pack.outputs.tarball }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          check-latest: true
+          package-manager-cache: false
+      - name: Tag matches the package.json version, not a prerelease
+        run: |
+          expected="v$(node -p 'require("./package.json").version')"
+          if [ "$GITHUB_REF_NAME" != "$expected" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match package.json, which expects $expected"
+            exit 1
+          fi
+          # A prerelease would need npm publish --tag, or it would become latest.
+          case "$expected" in
+            *-*)
+              echo "::error::$expected is a prerelease: only patch, minor and major versions are released"
+              exit 1
+              ;;
+          esac
+      - run: npm ci
+      - run: npx biome ci
+      - run: npx tsc --noEmit
+      - run: npm test
+      # prepack compiles dist. The directory holds nothing but the tarball.
+      - name: Pack
+        id: pack
+        run: |
+          mkdir "$RUNNER_TEMP/package"
+          npm pack --pack-destination "$RUNNER_TEMP/package"
+          node -p 'const { name, version } = require("./package.json"); `name=${name}\nversion=${version}`' >> "$GITHUB_OUTPUT"
+          echo "tarball=$(basename "$RUNNER_TEMP"/package/*.tgz)" >> "$GITHUB_OUTPUT"
+      # The tarball that will be published, tried as CI tries it: fonts, theme and wasm.
+      - name: Smoke-test the packed tarball
+        env:
+          TARBALL: ${{ steps.pack.outputs.tarball }}
+        run: |
+          cd "$RUNNER_TEMP"
+          npx --yes "./package/$TARBALL" < "$GITHUB_WORKSPACE/test/fixtures/sample.json" > sample.svg
+          grep -q '<svg' sample.svg
+          npx --yes "./package/$TARBALL" "$GITHUB_WORKSPACE/test/fixtures/sample.json" -o sample.png
+          test "$(file --brief --mime-type sample.png)" = image/png
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: package
+          path: ${{ runner.temp }}/package/${{ steps.pack.outputs.tarball }}
+          if-no-files-found: error
+
+  # Only npm and pinned GitHub actions run here: the OIDC token cannot reach repository code or dev dependencies.
+  publish:
+    name: Publish ${{ github.ref_name }}
+    needs: build
+    runs-on: ubuntu-latest
+    environment: npm
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          # 24's bundled npm supports trusted publishing; 22's does not.
+          node-version: 24
+          check-latest: true
+          package-manager-cache: false
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: package
+          # Outside the working directory, where npm would read a .npmrc.
+          path: ${{ runner.temp }}/package
+      # The first version is published by hand, before the trusted publisher can exist.
+      # Its tag then finds it on the registry and skips the publish.
+      - name: Is this version on npm already?
+        id: npm
+        env:
+          SPEC: ${{ needs.build.outputs.name }}@${{ needs.build.outputs.version }}
+        run: |
+          log="$(mktemp)"
+          # npm view fails with E404 both for an unknown version and for a package never published.
+          if npm view "$SPEC" version > /dev/null 2> "$log"; then
+            echo "$SPEC is published"
+            echo "published=true" >> "$GITHUB_OUTPUT"
+          elif grep -q E404 "$log"; then
+            echo "$SPEC is not published"
+            echo "published=false" >> "$GITHUB_OUTPUT"
+          else
+            cat "$log" >&2
+            exit 1
+          fi
+      # Trusted publishing adds provenance; publishing this tarball runs no package lifecycle script.
+      - name: Publish to npm
+        if: steps.npm.outputs.published == 'false'
+        env:
+          TARBALL: ${{ needs.build.outputs.tarball }}
+        run: npm publish "$RUNNER_TEMP/package/$TARBALL" --ignore-scripts
+
+  github-release:
+    name: GitHub release ${{ github.ref_name }}
+    needs: publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          if gh release view "$GITHUB_REF_NAME" > /dev/null 2>&1; then
+            echo "Release $GITHUB_REF_NAME already exists"
+          else
+            gh release create "$GITHUB_REF_NAME" --generate-notes
+          fi

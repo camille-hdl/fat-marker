@@ -1,5 +1,5 @@
 # from @camille-hdl/hill-chart@0.2.0, 738a559
-# adapted: without the packed-tarball smoke test, for now
+# adapted: package name and fixture
 name: CI
 
 on:
@@ -31,3 +31,13 @@ jobs:
       - run: npx biome ci
       - run: npx tsc --noEmit
       - run: npm test
+      # Only this job exercises the compiled package paths for fonts, theme and wasm.
+      - name: Smoke-test the packed tarball
+        if: matrix.node == 24
+        run: |
+          npm pack --pack-destination "$RUNNER_TEMP"
+          cd "$RUNNER_TEMP"
+          npx --yes ./camille-hdl-fat-marker-*.tgz < "$GITHUB_WORKSPACE/test/fixtures/sample.json" > sample.svg
+          grep -q '<svg' sample.svg
+          npx --yes ./camille-hdl-fat-marker-*.tgz "$GITHUB_WORKSPACE/test/fixtures/sample.json" -o sample.png
+          test "$(file --brief --mime-type sample.png)" = image/png
