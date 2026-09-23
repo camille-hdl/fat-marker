@@ -34,6 +34,7 @@ const GAP = 0.25 * em;
 const CONTENT_GAP = 1 * em;
 const PLACE_GAP = 1.5 * em;
 const CORRIDOR_GAP = 0.6 * em;
+const VARIANT_GAP = 2 * em;
 /** Between two lanes of a corridor. */
 const LANE = 0.6 * em;
 /** Between two arrivals on a side edge, when it is tall enough. */
@@ -107,7 +108,7 @@ const sketches: Record<string, Sketch> = {
 			},
 		],
 	},
-	"long sketch headings": {
+	"long headings and variant names": {
 		title:
 			"A long sketch title that must wrap across several lines to remain within the minimum heading width",
 		subtitle:
@@ -711,7 +712,7 @@ const invariants: [string, (sketch: Sketch, laid: Layout) => void][] = [
 		},
 	],
 	[
-		"keeps sketch headings, title and subtitle apart from each other and from the columns (invariant 3)",
+		"keeps variant names, title and subtitle apart from each other and from the columns (invariant 3)",
 		(_, laid) => {
 			for (const { heading, column } of laid.variants) {
 				assert.ok(bottom(heading.box) + GAP <= column.y);
@@ -1155,6 +1156,11 @@ describe("layout", () => {
 		for (const line of heading.lines) {
 			assert.ok(measure(line, 700, heading.size) <= wrapWidth, line);
 		}
+		assert.ok(
+			heading.lines.some(
+				(line) => measure(line, 700, heading.size) > NAME_WRAP_MIN,
+			),
+		);
 	});
 
 	test("next variant starts VARIANT_GAP after a widened variant name area", () => {
@@ -1167,8 +1173,9 @@ describe("layout", () => {
 				{ variant: "B", contains: [{ place: "End" }] },
 			],
 		}).variants;
-		assert.ok(first.area.width > first.column.width);
-		assert.ok(close(second.column.x, right(first.area) + 2 * em));
+		assert.equal(first.heading.lines.length, 1);
+		assert.ok(close(right(first.area), right(first.heading.box)));
+		assert.ok(close(second.column.x, right(first.area) + VARIANT_GAP));
 	});
 
 	test("puts the first column's top left at (0, 0)", () => {
@@ -1522,8 +1529,8 @@ describe("layout", () => {
 		assert.ok(close(gap, em), String(gap));
 	});
 
-	test("wraps long sketch headings and aligns them on a shared baseline", () => {
-		const laid = laidOut(sketches["long sketch headings"]);
+	test("wraps long sketch headings and aligns variant names on a shared baseline", () => {
+		const laid = laidOut(sketches["long headings and variant names"]);
 		assert.ok(laid.title && laid.title.lines.length > 1);
 		assert.ok(laid.subtitle && laid.subtitle.lines.length > 1);
 		assert.notEqual(

@@ -80,7 +80,7 @@ const PLACE_NAME_SIZE = 1.1;
 const LABEL_WRAP = 12;
 /** Place names wrap at this width when their contents are narrower. */
 const NAME_WRAP_MIN = 12;
-/** Variant names stay on one line across narrow columns. */
+/** Variant names wrap at this width when their column and corridor are narrower, so that a usual name stays on one line. */
 const VARIANT_NAME_WRAP_MIN = 20;
 /** Between a variant's name and its column. */
 const HEADING_GAP = 0.8;
