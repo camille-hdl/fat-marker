@@ -37,16 +37,18 @@ export function routeArrows(
 		if (item.kind === "place") places.set(item.place, item);
 		else boxes.set(item.affordance, item.box);
 	}
-	const arrivals = spreadArrivals(variant, places, em);
+	const starts = variant.arrows.map(({ from }): Point => {
+		const box = boxes.get(from) as Box;
+		return { x: box.x + box.width, y: box.y + box.height / 2 };
+	});
+	const arrivals = spreadArrivals(variant, starts, places, em);
 	const arrows = variant.arrows.map((arrow, lane): LaidArrow => {
-		const box = boxes.get(arrow.from) as Box;
-		const start = { x: box.x + box.width, y: box.y + box.height / 2 };
 		const x =
 			column.x + column.width + (CORRIDOR_GAP + (lane + 0.5) * LANE_WIDTH) * em;
 		return {
 			arrow,
 			side: "right",
-			path: throughLane(start, x, arrivals[lane], TURN_RADIUS * em),
+			path: throughLane(starts[lane], x, arrivals[lane], TURN_RADIUS * em),
 		};
 	});
 	const lanes = variant.arrows.length;
@@ -57,29 +59,42 @@ export function routeArrows(
 }
 
 /**
- * Where each arrow of `variant` reaches the right edge of its target, in data order. The arrivals on one edge go down
- * every ARRIVAL_STEP from the middle of the name's first line, or evenly down to the bottom corner of the frame when
- * that would pass it.
+ * Where each arrow of `variant`, from its start in `starts`, reaches the right edge of its target, in data order. The
+ * arrivals on one edge go down every ARRIVAL_STEP from the middle of the name's first line, or evenly down to the
+ * bottom corner of the frame when that would pass it. The arrows from above take them first, in the order of their
+ * lanes, then the arrows from below, in the reverse order, so that no arrow turns across the lane of another on its way
+ * to the edge. An arrow comes from above when it starts above the middle of the arrivals, which also settles one that
+ * starts beside its target, in a row.
  */
 function spreadArrivals(
 	variant: ModelVariant,
+	starts: Point[],
 	places: Map<ModelPlace, LaidPlace>,
 	em: number,
 ): Point[] {
-	const counts = new Map<ModelPlace, number>();
-	for (const { to } of variant.arrows)
-		counts.set(to, (counts.get(to) ?? 0) + 1);
-	const reached = new Map<ModelPlace, number>();
-	return variant.arrows.map(({ to }) => {
+	const edges = new Map<ModelPlace, number[]>();
+	for (const [lane, { to }] of variant.arrows.entries()) {
+		edges.set(to, [...(edges.get(to) ?? []), lane]);
+	}
+	const arrivals: Point[] = [];
+	for (const [to, lanes] of edges) {
 		const { frame, name } = places.get(to) as LaidPlace;
-		const [count, rank] = [counts.get(to) ?? 1, reached.get(to) ?? 0];
-		reached.set(to, rank + 1);
 		const top = name.box.y + name.lineHeight / 2;
 		const lowest = frame.y + frame.height;
 		const step =
-			count > 1 ? Math.min(ARRIVAL_STEP * em, (lowest - top) / (count - 1)) : 0;
-		return { x: frame.x + frame.width, y: top + rank * step };
-	});
+			lanes.length > 1
+				? Math.min(ARRIVAL_STEP * em, (lowest - top) / (lanes.length - 1))
+				: 0;
+		const middle = top + ((lanes.length - 1) * step) / 2;
+		const fromAbove = lanes.filter((lane) => starts[lane].y < middle);
+		const fromBelow = lanes
+			.filter((lane) => starts[lane].y >= middle)
+			.reverse();
+		for (const [rank, lane] of [...fromAbove, ...fromBelow].entries()) {
+			arrivals[lane] = { x: frame.x + frame.width, y: top + rank * step };
+		}
+	}
+	return arrivals;
 }
 
 /**

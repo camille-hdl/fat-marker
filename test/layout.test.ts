@@ -112,6 +112,58 @@ const sketches: Record<string, Sketch> = {
 			{ variant: "B", contains: [{ place: "B" }] },
 		],
 	},
+	"arrows into one edge from above and from below": {
+		variants: [
+			{
+				variant: "A",
+				contains: [
+					{
+						place: "Top",
+						contains: [
+							{ affordance: "Up 1", to: "Hub" },
+							{ affordance: "Up 2", to: "Hub" },
+						],
+					},
+					{ place: "Gap", contains: [{ affordance: "Up 3", to: "Hub" }] },
+					{
+						place: "Hub",
+						contains: ["A", "B", "C", "D", "E", "F"].map((affordance) => ({
+							affordance,
+						})),
+					},
+					{
+						place: "Below",
+						contains: [
+							{ affordance: "Down 1", to: "Hub" },
+							{ affordance: "Down 2", to: "Hub" },
+						],
+					},
+					{
+						place: "Further",
+						contains: [{ affordance: "Down 3", to: "Hub" }],
+					},
+				],
+			},
+		],
+	},
+	"arrows up into a short place": {
+		variants: [
+			{
+				variant: "A",
+				contains: [
+					{ place: "Target" },
+					{ place: "Middle", contains: [{ affordance: "Stay" }] },
+					{
+						place: "Sources",
+						contains: ["One", "Two", "Three", "Four"].map((affordance) => ({
+							affordance,
+							to: "Target",
+						})),
+					},
+				],
+			},
+		],
+	},
 };
 
 /** The mulberry32 generator, for the random sketches: numbers in [0, 1). */
@@ -399,6 +451,53 @@ function laneOf({ path }: LaidArrow): number {
 		"not on one lane",
 	);
 	return x;
+}
+
+/**
+ * The part of an arrow from its lane to its arrival, as a polyline: its run and its last turn, or its single cubic from
+ * its rightmost point, where it reaches its lane.
+ */
+function approachOf({ path }: LaidArrow): Point[] {
+	const points = (path.length === 3 ? path.slice(1) : path).flatMap(
+		([p0, p1, p2, p3]) =>
+			Array.from({ length: 33 }, (_, k) => {
+				const t = k / 32;
+				const [a, b, c, d] = [
+					(1 - t) ** 3,
+					3 * t * (1 - t) ** 2,
+					3 * t ** 2 * (1 - t),
+					t ** 3,
+				];
+				return {
+					x: a * p0.x + b * p1.x + c * p2.x + d * p3.x,
+					y: a * p0.y + b * p1.y + c * p2.y + d * p3.y,
+				};
+			}),
+	);
+	if (path.length === 3) return points;
+	const rightmost = points.reduce(
+		(best, point, i) => (point.x > points[best].x ? i : best),
+		0,
+	);
+	return points.slice(rightmost);
+}
+
+/** Whether two polylines cross: a segment of one strictly crosses a segment of the other. */
+function crosses(one: Point[], other: Point[]): boolean {
+	const turn = (a: Point, b: Point, c: Point) =>
+		Math.sign((b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x));
+	for (let i = 1; i < one.length; i++) {
+		for (let j = 1; j < other.length; j++) {
+			const [a, b, c, d] = [one[i - 1], one[i], other[j - 1], other[j]];
+			if (
+				turn(a, b, c) * turn(a, b, d) < 0 &&
+				turn(c, d, a) * turn(c, d, b) < 0
+			) {
+				return true;
+			}
+		}
+	}
+	return false;
 }
 
 /** A name for an arrow in a failure message. */
@@ -860,7 +959,7 @@ const invariants: [string, (sketch: Sketch, laid: Layout) => void][] = [
 		},
 	],
 	[
-		"spreads the arrivals on one edge of a place, distinct and in data order (arrow invariant 6)",
+		"spreads the arrivals on one edge of a place apart, and never crosses two arrows of one edge between their lane and their arrival (arrow invariant 6)",
 		(_, laid) => {
 			for (const variant of laid.variants) {
 				const edges = new Map<string, LaidArrow[]>();
@@ -875,8 +974,13 @@ const invariants: [string, (sketch: Sketch, laid: Layout) => void][] = [
 						const last = lastPoint(laidArrow);
 						return laidArrow.side === "top" ? last.x : last.y;
 					});
-					for (let i = 1; i < along.length; i++) {
-						assert.ok(along[i] > along[i - 1] + EPSILON, arrowName(arrows[i]));
+					for (const [i, one] of arrows.entries()) {
+						for (const [j, other] of arrows.entries()) {
+							if (j <= i) continue;
+							const what = `${arrowName(one)} and ${arrowName(other)}`;
+							assert.ok(Math.abs(along[i] - along[j]) > EPSILON, what);
+							assert.ok(!crosses(approachOf(one), approachOf(other)), what);
+						}
 					}
 				}
 			}
@@ -1222,12 +1326,25 @@ describe("layout", () => {
 		assert.ok(list);
 		const ends = variant.arrows
 			.filter(({ arrow }) => arrow.to === list.place)
-			.map(lastPoint);
+			.map(lastPoint)
+			.sort((one, other) => one.y - other.y);
 		assert.equal(ends.length, 3);
 		const first = list.name.box.y + list.name.lineHeight / 2;
 		for (const [i, end] of ends.entries()) {
 			assert.ok(close(end.y, first + i * ARRIVAL_STEP), String(i));
 		}
+	});
+
+	test("gives the arrivals on one edge to the arrows from above in the order of their lanes, then to those from below in the reverse order", () => {
+		const [variant] = laidOut(
+			sketches["arrows into one edge from above and from below"],
+		).variants;
+		assert.deepEqual(
+			[...variant.arrows]
+				.sort((one, other) => lastPoint(one).y - lastPoint(other).y)
+				.map(({ arrow }) => arrow.from.text.text),
+			["Up 1", "Up 2", "Up 3", "Down 3", "Down 2", "Down 1"],
+		);
 	});
 
 	test("spreads the arrivals evenly down to the bottom corner of the frame when 1 em apart would pass it", () => {
