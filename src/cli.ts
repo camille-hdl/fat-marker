@@ -19,27 +19,61 @@ export type Io = {
 	stderr: NodeJS.WritableStream;
 };
 
-const help = `Usage: fat-marker [input.json|-] [--theme theme.json] [-o out.svg|out.png] [--format svg|png]
+const help = `Usage: fat-marker [input.json|-] [-o out.svg|out.png] [--format svg|png] [--theme theme.json]
 
 Draws a fat marker sketch (Shape Up, chapter 4) as SVG or PNG from a JSON description of its
-variants, places and affordances. Reads stdin when given no input file, or "-".
+variants, places, affordances and arrows. Reads stdin when given no input file, or "-".
 
 Options:
-  -o, --output <file>  write to <file> instead of stdout; format follows .svg or .png
-      --format <fmt>   svg (default) or png; PNG goes to stdout only when it is not a terminal
+  -o, --output <file>  write to <file> instead of stdout, as SVG or PNG by its extension
+      --format <fmt>   svg (default) or png; a PNG goes to stdout only when it is not a terminal
       --theme <file>   apply a partial theme read from a JSON file
   -h, --help           print this help
       --version        print the version
 
+Format:
+  sketch      { "title"?, "subtitle"?, "variants": [variant, ...] }
+  variant     { "variant": "A · Name", "contains": [place or row, ...] }
+              drawn left to right, each under its name, unique in the sketch
+  place       { "place": "Name", "contains"?: [place, affordance or row, ...] }
+              a screen, panel, dialog or menu; its name is unique in its variant;
+              omit "contains" for an empty place
+  affordance  { "affordance": "Text", "to"?: "Place" or ["Place", ...], "mark"?: mark }
+              something to act on, a button without a mark; "to" draws an arrow to a
+              place of the same variant, other than the ones holding the affordance
+  mark        "field", "select", "checkbox", "radio", "toggle", "link", "chevron" or "handle"
+  copy        { "affordance": "Text", "read": true, "scribble"?: 1 to 20 }
+              text to read, drawn bare, never with "to" or "mark"; "scribble": n draws
+              n wavy lines instead of the text
+  row         { "row": [place, affordance or row, ...] }
+              sets its contents side by side; no name, no frame, no arrow to it
+Contents stack top to bottom in data order. Places and rows nest at most 20 deep.
+Unknown keys are errors.
+
+Example:
+  { "title": "Plot booking",
+    "variants": [ { "variant": "A · Separate screen", "contains": [
+      { "place": "Plot list", "contains": [
+        { "affordance": "Plots free this season", "read": true },
+        { "affordance": "Book a plot", "to": "Booking" } ] },
+      { "place": "Booking", "contains": [
+        { "affordance": "Your name", "mark": "field" },
+        { "affordance": "Share with a neighbour", "mark": "checkbox" } ] } ] } ] }
+
+A PNG is twice the SVG's size, at most 16384 pixels on a side, and drawn with the embedded font
+only, so it looks the same on every machine; a character the font lacks (Greek, Cyrillic, CJK,
+emoji, symbols such as ✓ or →) fails: write it as a word, use a mark, or render SVG.
+
 Examples:
   fat-marker sketch.json > sketch.svg
-  cat sketch.json | fat-marker -o sketch.svg
-  fat-marker sketch.json -o sketch.png
+  fat-marker sketch.json -o sketch.png --theme theme.json
   fat-marker sketch.json --format png > sketch.png
+  cat sketch.json | fat-marker -o sketch.svg
 
 Exit codes:
   0  success
-  1  invalid JSON, data or theme, an input over 1 MiB, or a PNG that cannot be drawn; the message names the file and field
+  1  invalid JSON, data or theme, an input over 1 MiB, or a PNG that cannot be drawn; the
+     message names the file, and the field when there is one
   2  usage error, or a file that cannot be read or written
 `;
 

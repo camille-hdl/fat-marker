@@ -171,12 +171,15 @@ describe("run", () => {
 			assert.equal(stdout, "");
 			assert.match(stderr, /^fat-marker: [\s\S]*\nTry fat-marker --help\n$/);
 		}
-		assert.deepEqual(await runCli([minimalPath, "--format", "\u001b[31m\u202e"]), {
-			code: 2,
-			stdout: "",
-			stderr:
-				'fat-marker: unknown format "\\u001b[31m\\u202e"; choose svg or png\nTry fat-marker --help\n',
-		});
+		assert.deepEqual(
+			await runCli([minimalPath, "--format", "\u001b[31m\u202e"]),
+			{
+				code: 2,
+				stdout: "",
+				stderr:
+					'fat-marker: unknown format "\\u001b[31m\\u202e"; choose svg or png\nTry fat-marker --help\n',
+			},
+		);
 	});
 
 	test("refuses to write PNG to a terminal", async () => {
@@ -466,6 +469,50 @@ describe("run", () => {
 });
 
 describe("run, on help, version and usage errors", () => {
+	test("documents every data key and mark in help", async () => {
+		const { stdout } = await runCli(["--help"]);
+		for (const key of [
+			"title",
+			"subtitle",
+			"variants",
+			"variant",
+			"contains",
+			"place",
+			"affordance",
+			"to",
+			"mark",
+			"read",
+			"scribble",
+			"row",
+		]) {
+			assert.ok(stdout.includes(`"${key}"`), key);
+		}
+		for (const mark of [
+			"field",
+			"select",
+			"checkbox",
+			"radio",
+			"toggle",
+			"link",
+			"chevron",
+			"handle",
+		]) {
+			assert.ok(stdout.includes(`"${mark}"`), mark);
+		}
+	});
+
+	test("renders the JSON example shown in help", async () => {
+		const { stdout } = await runCli(["--help"]);
+		const match = stdout.match(/\nExample:\n((?: {2}.*\n)+)\nA PNG/);
+		assert.ok(match, "help example is present");
+		const example = match[1]
+			.split("\n")
+			.filter(Boolean)
+			.map((line) => line.slice(2))
+			.join("\n");
+		assert.match(renderSvg(JSON.parse(example)), /^<svg /);
+	});
+
 	for (const flag of ["--help", "-h"]) {
 		test(`prints the help on stdout with ${flag}`, async () => {
 			const { code, stdout, stderr } = await runCli([flag]);
@@ -480,7 +527,10 @@ describe("run, on help, version and usage errors", () => {
 			]) {
 				assert.ok(stdout.includes(option), option);
 			}
-			assert.match(stdout, /\nExit codes:\n +0 .+\n +1 .+\n +2 .+\n$/);
+			assert.match(
+				stdout,
+				/\nExit codes:\n {2}0 {2}success\n {2}1 {2}[\s\S]*\n {2}2 {2}usage error, or a file that cannot be read or written\n$/,
+			);
 			assert.match(stdout, /1 {2}invalid JSON, data or theme/);
 		});
 	}
