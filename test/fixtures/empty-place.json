@@ -1,0 +1,14 @@
+{
+	"variants": [
+		{
+			"variant": "A · Waiting list",
+			"contains": [
+				{
+					"place": "Waiting list",
+					"contains": [{ "affordance": "Join" }, { "place": "Confirmation" }]
+				},
+				{ "place": "Receipt" }
+			]
+		}
+	]
+}

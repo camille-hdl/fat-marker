@@ -2,7 +2,7 @@
 // adapted: the same skeleton (toSvg, text), with <desc> rewritten, anchor "middle", and places and affordances drawn
 import { FONT_FAMILY } from "./font.ts";
 import { escapeXml, num, rect, roundRect, wobble } from "./hand.ts";
-import type { Theme } from "./input.ts";
+import type { ModelContent, ModelPlace, Theme } from "./input.ts";
 import type { LaidAffordance, LaidPlace, Layout, TextBlock } from "./layout.ts";
 
 // Lengths in em, relative to theme.fontSize.
@@ -49,21 +49,37 @@ export function toSvg(layout: Layout, theme: Theme): string {
  */
 function describe(layout: Layout): string {
 	const variants = layout.variants
-		.map(({ variant, items }) =>
-			[
-				variant.name.text,
-				...items.map((item) =>
-					item.kind === "place"
-						? `- place: ${item.place.name.text}`
-						: `- affordance: ${item.affordance.text.text}`,
-				),
-			].join("\n"),
+		.map(({ variant }) =>
+			describeContents(variant.contents, [variant.name.text]).join("\n"),
 		)
 		.join("\n\n");
 	return [
 		...(layout.subtitle ? [layout.subtitle.lines.join(" ")] : []),
 		variants,
 	].join("\n");
+}
+
+/**
+ * Appends to `lines` one line per place and affordance of `contents`, in document order; a nested place says which place
+ * it is in.
+ */
+function describeContents(
+	contents: ModelContent[],
+	lines: string[],
+	parent?: ModelPlace,
+): string[] {
+	for (const content of contents) {
+		if (content.kind === "row") {
+			describeContents(content.contents, lines, parent);
+		} else if (content.kind === "affordance") {
+			lines.push(`- affordance: ${content.text.text}`);
+		} else {
+			const within = parent ? ` (in ${parent.name.text})` : "";
+			lines.push(`- place: ${content.name.text}${within}`);
+			describeContents(content.contents, lines, content);
+		}
+	}
+	return lines;
 }
 
 /** A place's frame, in four strokes, and its name. */

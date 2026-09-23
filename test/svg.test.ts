@@ -40,7 +40,13 @@ function sketch(
 	};
 }
 
-const fixtures = ["minimal", "title-subtitle"];
+const fixtures = [
+	"minimal",
+	"title-subtitle",
+	"rows",
+	"long-text",
+	"empty-place",
+];
 
 describe("renderSvg", () => {
 	for (const name of fixtures) {
@@ -123,6 +129,59 @@ describe("renderSvg", () => {
 				"- place: Receipt",
 			].join("\n"),
 		);
+	});
+
+	test("describes a nested place with the place it is in, looking through rows", () => {
+		const svg = renderSvg({
+			variants: [
+				{
+					variant: "A · Separate booking screen",
+					contains: [
+						{
+							row: [
+								{
+									place: "Booking",
+									contains: [
+										{ affordance: "Confirm" },
+										{
+											row: [
+												{
+													place: "Options",
+													contains: [{ affordance: "Share with a neighbour" }],
+												},
+												{ affordance: "Cancel" },
+											],
+										},
+									],
+								},
+								{ place: "Receipt" },
+							],
+						},
+					],
+				},
+			],
+		});
+		assert.equal(
+			desc(svg),
+			[
+				"A · Separate booking screen",
+				"- place: Booking",
+				"- affordance: Confirm",
+				"- place: Options (in Booking)",
+				"- affordance: Share with a neighbour",
+				"- affordance: Cancel",
+				"- place: Receipt",
+			].join("\n"),
+		);
+	});
+
+	test("draws nested places like top-level ones, and an empty place as its frame and name", () => {
+		const svg = renderSvg(fixture("empty-place"));
+		const places = svg.match(
+			/<g class="place">\n {2}<path d="[^"]+"[^>]*\/>\n {2}<text [^>]*font-weight="700"[^>]*>(?:<tspan [^>]*>[^<]*<\/tspan>)+<\/text>\n<\/g>/g,
+		);
+		assert.equal(places?.length, 3);
+		assert.match(places?.[1] ?? "", />Confirmation</);
 	});
 
 	test("escapes markup in a variant name, a place name and an affordance text", () => {

@@ -5,7 +5,9 @@ import type {
 	Model,
 	ModelAffordance,
 	ModelArrow,
+	ModelContent,
 	ModelPlace,
+	ModelRow,
 	ModelVariant,
 	Text,
 	Theme,
@@ -74,14 +76,14 @@ const SUBTITLE_SIZE = 1;
 const PLACE_NAME_SIZE = 1.1;
 /** Button labels wrap at this width. */
 const LABEL_WRAP = 12;
-/** Variant names wrap at this width when their column is narrower. */
+/** Variant and place names wrap at this width when their contents are narrower. */
 const NAME_WRAP_MIN = 12;
 /** Between a variant's name and its column. */
 const HEADING_GAP = 0.8;
 const VARIANT_GAP = 2;
 const SKETCH_HEADING_GAP = 0.7;
 const SKETCH_WRAP_MIN = 24;
-/** Between the contents of a column. */
+/** Between the contents of a column or of a row. */
 const CONTENT_GAP = 1;
 /** Inside a place's frame, around its name and contents. */
 const PLACE_PADDING = 0.9;
@@ -91,13 +93,20 @@ const BUTTON_PADDING_X = 0.6;
 const BUTTON_PADDING_Y = 0.35;
 const MARGIN = 1;
 
-/** A place, measured: its name and its contents are laid out anywhere, until placing moves them. */
-type MeasuredPlace = {
+/**
+ * A content, measured at its natural size, the smallest that fits it: its text is laid out anywhere, until placing moves
+ * it.
+ */
+type Measured = MeasuredPlace | MeasuredAffordance | MeasuredRow;
+type Size = { width: number; height: number };
+type MeasuredPlace = Size & {
+	kind: "place";
 	place: ModelPlace;
 	name: TextBlock;
-	contents: LaidAffordance[];
-	width: number; // the narrowest its frame can be
+	contents: Measured[];
 };
+type MeasuredAffordance = Size & { kind: "affordance"; laid: LaidAffordance };
+type MeasuredRow = Size & { kind: "row"; contents: Measured[] };
 
 /**
  * Places every element of a fat marker sketch: the top left of the first variant's column at (0, 0), variant names
@@ -150,18 +159,15 @@ export function layout(model: Model, theme: Theme): Layout {
 	};
 }
 
-/** A variant's places, stacked in data order in a column as wide as the widest, under the variant's name. */
+/** A variant's contents, stacked in data order in a column as wide as the widest, under the variant's name. */
 function placeVariant(variant: ModelVariant, em: number): LaidVariant {
-	const places = variant.contents
-		.filter((content) => content.kind === "place")
-		.map((place) => measurePlace(place, em));
-	const width = largest(places.map((place) => place.width));
+	const contents = variant.contents.map((content) =>
+		measureContent(content, em),
+	);
+	const { width, height } = columnSize(contents, em);
 	const items: LaidVariant["items"] = [];
-	let y = 0;
-	for (const place of places) {
-		y = placePlace(place, { x: 0, y, width }, em, items) + CONTENT_GAP * em;
-	}
-	const column = { x: 0, y: 0, width, height: y - CONTENT_GAP * em };
+	placeColumn(contents, { x: 0, y: 0, width }, em, items);
+	const column = { x: 0, y: 0, width, height };
 	const size = VARIANT_NAME_SIZE * em;
 	const lines = wrap(
 		variant.name.text,
@@ -229,62 +235,145 @@ function moveVariant(variant: LaidVariant, x: number): LaidVariant {
 	};
 }
 
-function measurePlace(place: ModelPlace, em: number): MeasuredPlace {
-	const size = PLACE_NAME_SIZE * em;
-	const name = textBlock(
-		[place.name.text],
-		700,
-		size,
-		"start",
-		0,
-		(LINE_HEIGHT * size) / 2,
-		place.name.field,
-	);
-	const contents = place.contents
-		.filter((content) => content.kind === "affordance")
-		.map((affordance) => measureButton(affordance, em));
-	const width = largest([
-		name.box.width,
-		...contents.map((content) => content.box.width),
-	]);
+function measureContent(content: ModelContent, em: number): Measured {
+	if (content.kind === "place") return measurePlace(content, em);
+	if (content.kind === "row") return measureRow(content, em);
+	const laid = measureButton(content, em);
 	return {
-		place,
-		name,
-		contents,
-		width: width + 2 * PLACE_PADDING * em,
+		kind: "affordance",
+		laid,
+		width: laid.box.width,
+		height: laid.box.height,
 	};
 }
 
+/** A place: padding around its name, wrapped at the width of its contents or wider, and its contents in a column. */
+function measurePlace(place: ModelPlace, em: number): MeasuredPlace {
+	const contents = place.contents.map((content) => measureContent(content, em));
+	const column = columnSize(contents, em);
+	const size = PLACE_NAME_SIZE * em;
+	const lines = wrap(
+		place.name.text,
+		Math.max(column.width, NAME_WRAP_MIN * em),
+		700,
+		size,
+	);
+	const name = textBlock(lines, 700, size, "start", 0, 0, place.name.field);
+	const below = contents.length === 0 ? 0 : NAME_GAP * em + column.height;
+	return {
+		kind: "place",
+		place,
+		name,
+		contents,
+		width: Math.max(name.box.width, column.width) + 2 * PLACE_PADDING * em,
+		height: name.box.height + below + 2 * PLACE_PADDING * em,
+	};
+}
+
+/** A row: its contents side by side, apart, as tall as the tallest. */
+function measureRow(row: ModelRow, em: number): MeasuredRow {
+	const contents = row.contents.map((content) => measureContent(content, em));
+	let width = CONTENT_GAP * em * (contents.length - 1);
+	let height = 0;
+	for (const content of contents) {
+		width += content.width;
+		height = Math.max(height, content.height);
+	}
+	return { kind: "row", contents, width, height };
+}
+
+/** The size of `contents` stacked in a column, apart: as wide as the widest. */
+function columnSize(contents: Measured[], em: number): Size {
+	let width = 0;
+	let height = CONTENT_GAP * em * Math.max(0, contents.length - 1);
+	for (const content of contents) {
+		width = Math.max(width, content.width);
+		height += content.height;
+	}
+	return { width, height };
+}
+
 /**
- * Lays `measured` out at the top left of `at`, as wide as it, its name at the top left and its contents stacked below,
- * and appends them to `items`. Returns the bottom of its frame.
+ * Stacks `contents` down from the top left of `at`, aligned left, each place stretched to the width of `at`, and
+ * appends them to `items`.
  */
-function placePlace(
-	measured: MeasuredPlace,
+function placeColumn(
+	contents: Measured[],
 	at: { x: number; y: number; width: number },
 	em: number,
 	items: LaidVariant["items"],
-): number {
+): void {
+	let y = at.y;
+	for (const content of contents) {
+		placeContent(
+			content,
+			{ x: at.x, y, width: at.width, height: content.height },
+			em,
+			items,
+		);
+		y += content.height + CONTENT_GAP * em;
+	}
+}
+
+/** Sets `row`'s contents side by side from (`x`, `y`), aligned top, each place stretched to the row's height. */
+function placeRow(
+	row: MeasuredRow,
+	x: number,
+	y: number,
+	em: number,
+	items: LaidVariant["items"],
+): void {
+	let left = x;
+	for (const content of row.contents) {
+		placeContent(
+			content,
+			{ x: left, y, width: content.width, height: row.height },
+			em,
+			items,
+		);
+		left += content.width + CONTENT_GAP * em;
+	}
+}
+
+/**
+ * Lays `measured` out at the top left of `at`, and appends it and its contents to `items`, in document order. Only a
+ * place takes the size of `at`: affordances and rows never stretch.
+ */
+function placeContent(
+	measured: Measured,
+	at: Box,
+	em: number,
+	items: LaidVariant["items"],
+): void {
+	if (measured.kind === "affordance") {
+		items.push(moveAffordance(measured.laid, at.x, at.y));
+	} else if (measured.kind === "row") {
+		placeRow(measured, at.x, at.y, em, items);
+	} else {
+		placePlace(measured, at, em, items);
+	}
+}
+
+/** Lays a place out in `frame`: its name at the top left, its contents in a column below, as wide as the frame allows. */
+function placePlace(
+	measured: MeasuredPlace,
+	frame: Box,
+	em: number,
+	items: LaidVariant["items"],
+): void {
 	const padding = PLACE_PADDING * em;
-	const name = move(measured.name, at.x + padding, at.y + padding);
-	let y = name.box.y + name.box.height + NAME_GAP * em;
-	const contents = measured.contents.map((content) => {
-		const placed = moveAffordance(content, at.x + padding, y);
-		y += placed.box.height + CONTENT_GAP * em;
-		return placed;
-	});
-	const bottom =
-		(contents.length === 0
-			? name.box.y + name.box.height
-			: y - CONTENT_GAP * em) + padding;
-	items.push({
-		kind: "place",
-		place: measured.place,
-		frame: { x: at.x, y: at.y, width: at.width, height: bottom - at.y },
-		name,
-	});
-	for (const content of contents) items.push(content);
-	return bottom;
+	const name = move(measured.name, frame.x + padding, frame.y + padding);
+	items.push({ kind: "place", place: measured.place, frame, name });
+	placeColumn(
+		measured.contents,
+		{
+			x: frame.x + padding,
+			y: name.box.y + name.box.height + NAME_GAP * em,
+			width: frame.width - 2 * padding,
+		},
+		em,
+		items,
+	);
 }
 
 /** A button: its label wrapped at 12 em and centered, in a box that fits it with padding. */

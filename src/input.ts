@@ -85,6 +85,9 @@ const FORBIDDEN_IN_XML = /[\p{Cc}\p{Cs}\uFFFE\uFFFF]/u;
  */
 const UNSAFE_TO_PRINT = /[\p{Cc}\p{Cf}\p{Cs}\u2028\u2029]/u;
 
+/** How deep places and rows nest: a place or a row at the top of a variant is at depth 1. */
+const MAX_DEPTH = 20;
+
 const DEFAULT_THEME: Theme = JSON.parse(
 	readFileSync(new URL("../default-theme.json", import.meta.url), "utf8"),
 );
@@ -162,7 +165,7 @@ function readVariant(
 		);
 	}
 	let name: Text | undefined;
-	let contents: ModelPlace[] | undefined;
+	let contents: (ModelPlace | ModelRow)[] | undefined;
 	for (const [key, value] of presentEntries(variant)) {
 		if (key === "variant") {
 			name = readNormalized(value, `${field}.variant`);
@@ -175,7 +178,9 @@ function readVariant(
 			}
 			names.set(name.text, index);
 		} else if (key === "contains") {
-			contents = readContents(value, `${field}.contains`, readPlace);
+			contents = readContents(value, `${field}.contains`, (content, at) =>
+				readPlaceOrRow(content, at, 1),
+			);
 		} else {
 			throw new FatMarkerError(
 				keyPath(field, key),
@@ -212,21 +217,47 @@ function readContents<T>(
 	);
 }
 
-/** Reads a place, whose Wobble key `giveWobbleKeys` sets once its variant's name is known. */
-function readPlace(place: unknown, field: string): ModelPlace {
+/** Reads what a variant, or a row outside any place, holds at `depth`: a place or a row. */
+function readPlaceOrRow(
+	content: unknown,
+	field: string,
+	depth: number,
+): ModelPlace | ModelRow {
+	if (hasKey(content, "row"))
+		return readRow(content, field, depth, readPlaceOrRow);
+	return readPlace(content, field, depth);
+}
+
+/** Reads what a place, or a row inside a place, holds at `depth`: a place, an affordance or a row. */
+function readPlaceContent(
+	content: unknown,
+	field: string,
+	depth: number,
+): ModelContent {
+	if (hasKey(content, "row"))
+		return readRow(content, field, depth, readPlaceContent);
+	if (hasKey(content, "place")) return readPlace(content, field, depth);
+	return readAffordance(content, field);
+}
+
+/** Reads a place at `depth`, whose Wobble key `giveWobbleKeys` sets once its variant's name is known. */
+function readPlace(place: unknown, field: string, depth: number): ModelPlace {
 	if (!isObject(place)) {
 		throw new FatMarkerError(
 			field,
 			'expected a place (an object with a "place" key)',
 		);
 	}
+	checkDepth(field, depth);
 	let name: Text | undefined;
-	let contents: ModelAffordance[] = [];
+	let contents: ModelContent[] = [];
 	for (const [key, value] of presentEntries(place)) {
 		if (key === "place") {
 			name = readNormalized(value, `${field}.place`);
 		} else if (key === "contains") {
-			contents = readContents(value, `${field}.contains`, readAffordance);
+			contents = readContents(value, `${field}.contains`, (content, at) =>
+				readPlaceContent(content, at, depth + 1),
+			);
 		} else {
 			throw new FatMarkerError(
 				keyPath(field, key),
@@ -238,6 +269,43 @@ function readPlace(place: unknown, field: string): ModelPlace {
 		throw new FatMarkerError(`${field}.place`, "required");
 	}
 	return { kind: "place", name, key: "", contents };
+}
+
+/** Reads a row at `depth`, each of its contents with `readContent`. */
+function readRow(
+	row: Record<string, unknown>,
+	field: string,
+	depth: number,
+	readContent: (content: unknown, field: string, depth: number) => ModelContent,
+): ModelRow {
+	checkDepth(field, depth);
+	let contents: ModelContent[] = [];
+	for (const [key, value] of presentEntries(row)) {
+		if (key === "row") {
+			contents = readContents(value, `${field}.row`, (content, at) =>
+				readContent(content, at, depth + 1),
+			);
+		} else {
+			throw new FatMarkerError(
+				keyPath(field, key),
+				'unknown key; a row has only "row"',
+			);
+		}
+	}
+	return { kind: "row", contents };
+}
+
+/**
+ * Rejects a place or a row nested deeper than `MAX_DEPTH`, before its keys are read (decision 21): no recursive walk of
+ * the model then goes deeper.
+ */
+function checkDepth(field: string, depth: number): void {
+	if (depth > MAX_DEPTH) {
+		throw new FatMarkerError(
+			field,
+			`places and rows nest at most ${MAX_DEPTH} deep`,
+		);
+	}
 }
 
 /** Reads an affordance, whose Wobble key `giveWobbleKeys` sets once its variant's name is known. */
@@ -270,18 +338,35 @@ function readAffordance(affordance: unknown, field: string): ModelAffordance {
  * free of it.
  */
 function giveWobbleKeys(variant: ModelVariant): void {
-	for (const place of variant.contents) {
-		if (place.kind !== "place") continue;
-		place.key = ["place", variant.name.text, place.name.text].join("\0");
-		for (const affordance of place.contents) {
-			if (affordance.kind !== "affordance") continue;
-			affordance.key = [
+	for (const content of throughRows(variant.contents)) {
+		if (content.kind === "place") giveKeysIn(content, variant.name.text);
+	}
+}
+
+/** Sets the Wobble key of `place` and of everything it holds, at any depth. */
+function giveKeysIn(place: ModelPlace, variant: string): void {
+	place.key = ["place", variant, place.name.text].join("\0");
+	for (const content of throughRows(place.contents)) {
+		if (content.kind === "place") {
+			giveKeysIn(content, variant);
+		} else {
+			content.key = [
 				"affordance",
-				variant.name.text,
+				variant,
 				place.name.text,
-				affordance.text.text,
+				content.text.text,
 			].join("\0");
 		}
+	}
+}
+
+/** The places and affordances of `contents`, in document order, looking into rows but not into places. */
+function* throughRows(
+	contents: ModelContent[],
+): Generator<ModelPlace | ModelAffordance> {
+	for (const content of contents) {
+		if (content.kind === "row") yield* throughRows(content.contents);
+		else yield content;
 	}
 }
 
@@ -314,6 +399,11 @@ function readText(text: unknown, field: string, whenEmpty: string): string {
 /** The keys of `object` in document order, skipping those set to `undefined` as if absent. */
 function presentEntries(object: Record<string, unknown>): [string, unknown][] {
 	return Object.entries(object).filter(([, value]) => value !== undefined);
+}
+
+/** Whether `value` is a plain object with `key` present. */
+function hasKey(value: unknown, key: string): value is Record<string, unknown> {
+	return isObject(value) && value[key] !== undefined;
 }
 
 /** A plain object, as `JSON.parse` makes: no array, `Map`, `Date` or class instance. */

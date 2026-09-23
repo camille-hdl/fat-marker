@@ -1,0 +1,30 @@
+{
+	"variants": [
+		{
+			"variant": "A · Everything spelled out, for gardeners who read every word before they book",
+			"contains": [
+				{
+					"place": "Plot rules, as voted by the garden committee at the spring general meeting",
+					"contains": [{ "affordance": "OK" }]
+				},
+				{
+					"place": "Booking",
+					"contains": [
+						{
+							"affordance": "Share this plot with a neighbour who waters it while you are away for the summer holidays."
+						},
+						{ "affordance": "Rhabarberbarbarabarbarbarenbartbarbierbierbar" },
+						{
+							"place": "Neighbourhoodcommunitygardenassociationmembership",
+							"contains": [{ "affordance": "Renew" }]
+						}
+					]
+				}
+			]
+		},
+		{
+			"variant": "B",
+			"contains": [{ "place": "Plots" }]
+		}
+	]
+}

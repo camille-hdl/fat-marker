@@ -1,10 +1,13 @@
 // from @camille-hdl/hill-chart@0.2.0, 738a559
-// functions fixture; the rest is new
+// functions fixture and generator; randomCharts as randomSketches (its text generator kept, the sketches new); the loops running a table of invariants over fixtures and random sketches. The invariants and the rest are new
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { describe, test } from "node:test";
 import { measure } from "../src/font.ts";
 import {
+	type Content,
+	type ModelAffordance,
+	type ModelContent,
 	type ModelPlace,
 	readSketch,
 	readTheme,
@@ -12,10 +15,9 @@ import {
 } from "../src/input.ts";
 import {
 	type Box,
-	type LaidAffordance,
+	type LaidPlace,
 	type Layout,
 	layout,
-	type TextBlock,
 } from "../src/layout.ts";
 
 const theme = readTheme(undefined);
@@ -29,14 +31,23 @@ const LABEL_WRAP = 12 * em;
 const NAME_WRAP_MIN = 12 * em;
 const SKETCH_WRAP_MIN = 24 * em;
 
+type LaidVariant = Layout["variants"][number];
+type Variant = Sketch["variants"][number];
+
 function fixture(name: string): Sketch {
 	const url = new URL(`fixtures/${name}.json`, import.meta.url);
 	return JSON.parse(readFileSync(url, "utf8"));
 }
 
+const fixtures = [
+	"minimal",
+	"title-subtitle",
+	"rows",
+	"long-text",
+	"empty-place",
+];
+
 const sketches: Record<string, Sketch> = {
-	minimal: fixture("minimal"),
-	"title and subtitle": fixture("title-subtitle"),
 	"several places and buttons": {
 		variants: [
 			{
@@ -92,6 +103,89 @@ const sketches: Record<string, Sketch> = {
 	},
 };
 
+/** The mulberry32 generator, for the random sketches: numbers in [0, 1). */
+function generator(seed: number): () => number {
+	let state = seed;
+	return () => {
+		state = (state + 0x6d2b79f5) | 0;
+		let t = Math.imul(state ^ (state >>> 15), 1 | state);
+		t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+		return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+	};
+}
+
+/** Places and rows of the random sketches nest at most this deep. */
+const RANDOM_DEPTH = 4;
+
+/**
+ * `count` random sketches, always the same: 1 to 4 variants of places and rows nested at most 4 deep, texts of 1 to 60
+ * characters, with or without a title and a subtitle.
+ */
+function randomSketches(count: number): Sketch[] {
+	const random = generator(20260923);
+	const integer = (min: number, max: number) =>
+		min + Math.floor(random() * (max - min + 1));
+	const pick = <T>(items: T[]): T => items[integer(0, items.length - 1)];
+	const letters = [..."abcdefghijklmnopqrstuvwxyzMWéàçô-"];
+	const word = (length: number) =>
+		Array.from({ length }, () => pick(letters)).join("");
+	const text = () => {
+		const length = integer(1, 60);
+		if (random() < 0.1) return word(length);
+		let words = word(integer(1, 12));
+		while (words.length < length) words += ` ${word(integer(1, 12))}`;
+		return words.slice(0, length).trim();
+	};
+	const distinct = (size: number, taken = new Set<string>()) => {
+		const texts = new Set<string>();
+		while (texts.size < size) {
+			const candidate = text();
+			if (!taken.has(candidate)) texts.add(candidate);
+		}
+		for (const candidate of texts) taken.add(candidate);
+		return [...texts];
+	};
+	return Array.from({ length: count }, () => {
+		const variants = distinct(integer(1, 4)).map((variant) => {
+			const places = new Set<string>();
+			/** A content at `depth`, if it is a place or a row; an affordance only inside a place. */
+			const content = (depth: number, inPlace: boolean): Content => {
+				const roll = random();
+				if (inPlace && (depth > RANDOM_DEPTH || roll < 0.45)) {
+					return { affordance: text() };
+				}
+				if (depth < RANDOM_DEPTH && roll > 0.8) {
+					return {
+						row: Array.from({ length: integer(1, 3) }, () =>
+							content(depth + 1, inPlace),
+						),
+					};
+				}
+				const [name] = distinct(1, places);
+				if (random() < 0.2) return { place: name };
+				return {
+					place: name,
+					contains: Array.from({ length: integer(1, 4) }, () =>
+						content(depth + 1, true),
+					),
+				};
+			};
+			return {
+				variant,
+				contains: Array.from(
+					{ length: integer(1, 3) },
+					() => content(1, false) as Variant["contains"][number],
+				),
+			};
+		});
+		return {
+			...(random() < 0.3 && { title: text() }),
+			...(random() < 0.3 && { subtitle: text() }),
+			variants,
+		};
+	});
+}
+
 function laidOut(sketch: Sketch): Layout {
 	return layout(readSketch(sketch), theme);
 }
@@ -111,106 +205,211 @@ function inside(inner: Box, outer: Box, inset = 0): boolean {
 }
 
 const bottom = (box: Box) => box.y + box.height;
+const right = (box: Box) => box.x + box.width;
+const close = (a: number, b: number) => Math.abs(a - b) < EPSILON;
 
-/** Every text block of `laid`, with the box that carries it. */
-function textBlocks(laid: Layout): { block: TextBlock; carrier: Box }[] {
-	return [
-		...(laid.title ? [{ block: laid.title, carrier: laid.viewBox }] : []),
-		...(laid.subtitle ? [{ block: laid.subtitle, carrier: laid.viewBox }] : []),
-		...laid.variants.flatMap(({ heading, area, items }) => [
-			{ block: heading, carrier: area },
-			...items.flatMap((item) =>
-				item.kind === "place"
-					? [{ block: item.name, carrier: item.frame }]
-					: item.label
-						? [{ block: item.label, carrier: item.box }]
-						: [],
-			),
-		]),
-	];
+function boundingBox(boxes: Box[]): Box {
+	const left = boxes.reduce((x, box) => Math.min(x, box.x), Infinity);
+	const top = boxes.reduce((y, box) => Math.min(y, box.y), Infinity);
+	const width = boxes.reduce((x, box) => Math.max(x, right(box)), -Infinity);
+	const height = boxes.reduce((y, box) => Math.max(y, bottom(box)), -Infinity);
+	return { x: left, y: top, width: width - left, height: height - top };
 }
 
-/** The items laid out for the contents of `place`, in data order. */
-function contentsOf(variant: Layout["variants"][number], place: ModelPlace) {
-	return place.contents.map((content) => {
-		const item = variant.items.find(
-			(item): item is LaidAffordance =>
-				item.kind === "affordance" && item.affordance === content,
-		);
-		assert.ok(item, `no item for a content of ${place.name.text}`);
-		return item;
-	});
-}
+/** A group of sibling contents, laid out in a column or in a row. */
+type Siblings = {
+	direction: "column" | "row";
+	contents: ModelContent[];
+	/** The place holding them, through rows; none at the top of a variant. */
+	holder?: ModelPlace;
+};
 
-for (const [name, sketch] of Object.entries(sketches)) {
-	describe(`layout of ${name}`, () => {
-		const laid = laidOut(sketch);
-
-		test("puts the first column's top left at (0, 0)", () => {
-			assert.deepEqual(
-				[laid.variants[0].column.x, laid.variants[0].column.y],
-				[0, 0],
-			);
-		});
-
-		test("lays columns left to right with their tops at zero (invariant 2)", () => {
-			for (let i = 0; i < laid.variants.length; i++) {
-				assert.equal(laid.variants[i].column.y, 0);
-				if (i > 0) {
-					assert.ok(
-						laid.variants[i - 1].area.x +
-							laid.variants[i - 1].area.width +
-							GAP <=
-							laid.variants[i].area.x,
-					);
-				}
+/** Every group of siblings of `variant`, at any depth. */
+function siblingGroups(variant: LaidVariant): Siblings[] {
+	const groups: Siblings[] = [];
+	const visit = (siblings: Siblings) => {
+		groups.push(siblings);
+		for (const content of siblings.contents) {
+			if (content.kind === "place") {
+				visit({
+					direction: "column",
+					contents: content.contents,
+					holder: content,
+				});
+			} else if (content.kind === "row") {
+				visit({
+					direction: "row",
+					contents: content.contents,
+					holder: siblings.holder,
+				});
 			}
-		});
+		}
+	};
+	visit({ direction: "column", contents: variant.variant.contents });
+	return groups;
+}
 
-		test("keeps every item inside its place, and every place inside its column (invariant 1)", () => {
+/** The places and affordances of `contents`, in document order, a place before its contents. */
+function documentOrder(
+	contents: ModelContent[],
+): (ModelPlace | ModelAffordance)[] {
+	return contents.flatMap((content) =>
+		content.kind === "row"
+			? documentOrder(content.contents)
+			: content.kind === "place"
+				? [content, ...documentOrder(content.contents)]
+				: [content],
+	);
+}
+
+/** Finds the box of any content of `variant`: a place's frame, an affordance's box, the extent of a row. */
+function boxFinder(variant: LaidVariant): (content: ModelContent) => Box {
+	const boxes = new Map<ModelContent, Box>();
+	for (const item of variant.items) {
+		if (item.kind === "place") boxes.set(item.place, item.frame);
+		else boxes.set(item.affordance, item.box);
+	}
+	const boxOf = (content: ModelContent): Box => {
+		const box =
+			content.kind === "row"
+				? boundingBox(content.contents.map(boxOf))
+				: boxes.get(content);
+		assert.ok(box, "a content has no item");
+		return box;
+	};
+	return boxOf;
+}
+
+/** The laid out place of each place of `variant`. */
+function placesOf(variant: LaidVariant): Map<ModelPlace, LaidPlace> {
+	const places = new Map<ModelPlace, LaidPlace>();
+	for (const item of variant.items) {
+		if (item.kind === "place") places.set(item.place, item);
+	}
+	return places;
+}
+
+/** A name for the content in a failure message. */
+function nameOf(content: ModelContent): string {
+	if (content.kind === "place") return content.name.text;
+	if (content.kind === "affordance") return content.text.text;
+	return "a row";
+}
+
+/** The geometry of `variant`'s heading and items, relative to its column's origin, rounded against float noise. */
+function localGeometry(variant: LaidVariant) {
+	const dx = variant.column.x;
+	const shift = (box: Box) => ({ ...box, x: box.x - dx });
+	const geometry = {
+		heading: {
+			x: variant.heading.x - dx,
+			baseline: variant.heading.baseline,
+			box: shift(variant.heading.box),
+			lines: variant.heading.lines,
+		},
+		column: shift(variant.column),
+		items: variant.items.map((item) =>
+			item.kind === "place"
+				? {
+						frame: shift(item.frame),
+						name: { x: item.name.x - dx, box: shift(item.name.box) },
+					}
+				: {
+						box: shift(item.box),
+						label: item.label && {
+							x: item.label.x - dx,
+							box: shift(item.label.box),
+						},
+					},
+		),
+	};
+	return JSON.parse(
+		JSON.stringify(geometry, (_key, value: unknown) =>
+			typeof value === "number" ? Number(value.toFixed(8)) : value,
+		),
+	);
+}
+
+/** The invariants every layout keeps (spec › Layout), each checked on a sketch and its layout. */
+const invariants: [string, (sketch: Sketch, laid: Layout) => void][] = [
+	[
+		"lists every place before its contents, in document order, with no entry for rows",
+		(_, laid) => {
 			for (const variant of laid.variants) {
+				assert.deepEqual(
+					variant.items.map((item) =>
+						item.kind === "place" ? item.place : item.affordance,
+					),
+					documentOrder(variant.variant.contents),
+				);
+			}
+		},
+	],
+	[
+		"keeps every content inside its place or its column, and a place's name above its contents (invariant 1)",
+		(_, laid) => {
+			for (const variant of laid.variants) {
+				const boxOf = boxFinder(variant);
+				const places = placesOf(variant);
+				for (const { contents, holder } of siblingGroups(variant)) {
+					const place = holder && places.get(holder);
+					for (const content of contents) {
+						const box = boxOf(content);
+						if (!place) {
+							assert.ok(inside(box, variant.column), nameOf(content));
+							continue;
+						}
+						assert.ok(inside(box, place.frame, GAP), nameOf(content));
+						assert.ok(bottom(place.name.box) + GAP <= box.y, nameOf(content));
+					}
+				}
 				for (const item of variant.items) {
-					if (item.kind !== "place") continue;
-					assert.ok(inside(item.frame, variant.column), item.place.name.text);
-					assert.ok(
-						inside(item.name.box, item.frame, GAP),
-						item.place.name.text,
-					);
-					for (const content of contentsOf(variant, item.place)) {
-						assert.ok(inside(content.box, item.frame, GAP));
+					if (item.kind === "place") {
 						assert.ok(
-							bottom(item.name.box) + GAP <= content.box.y,
-							"the name is above the contents",
+							inside(item.name.box, item.frame, GAP),
+							item.place.name.text,
 						);
 					}
 				}
 			}
-		});
-
-		test("stacks places, and the buttons of a place, top to bottom in data order, apart (invariants 2 and 3)", () => {
+		},
+	],
+	[
+		"lays siblings out in data order, apart, aligned left in a column and top in a row; variants left to right (invariants 2 and 3)",
+		(_, laid) => {
 			for (const variant of laid.variants) {
-				const places = variant.items.filter((item) => item.kind === "place");
-				const columns = [
-					places.map((place) => place.frame),
-					...places.map((place) =>
-						contentsOf(variant, place.place).map((content) => content.box),
-					),
-				];
-				for (const boxes of columns) {
+				const boxOf = boxFinder(variant);
+				for (const { direction, contents } of siblingGroups(variant)) {
+					const boxes = contents.map(boxOf);
 					for (let i = 1; i < boxes.length; i++) {
-						assert.ok(bottom(boxes[i - 1]) + GAP <= boxes[i].y, `box ${i}`);
+						const [before, after] = [boxes[i - 1], boxes[i]];
+						const what = `${nameOf(contents[i - 1])} then ${nameOf(contents[i])}`;
+						if (direction === "column") {
+							assert.ok(bottom(before) + GAP <= after.y, what);
+							assert.ok(close(before.x, after.x), what);
+						} else {
+							assert.ok(right(before) + GAP <= after.x, what);
+							assert.ok(close(before.y, after.y), what);
+						}
 					}
 				}
 			}
-		});
-
-		test("puts the variant name above its column, apart (invariant 3)", () => {
+			for (let i = 0; i < laid.variants.length; i++) {
+				assert.equal(laid.variants[i].column.y, 0);
+				if (i > 0) {
+					assert.ok(
+						right(laid.variants[i - 1].area) + GAP <= laid.variants[i].area.x,
+					);
+				}
+			}
+		},
+	],
+	[
+		"keeps variant names, title and subtitle apart from each other and from the columns (invariant 3)",
+		(_, laid) => {
 			for (const { heading, column } of laid.variants) {
 				assert.ok(bottom(heading.box) + GAP <= column.y);
 			}
-		});
-
-		test("keeps the headings above variant names and columns (invariant 3)", () => {
 			const topHeading = laid.subtitle ?? laid.title;
 			if (topHeading) {
 				for (const { heading } of laid.variants) {
@@ -220,53 +419,152 @@ for (const [name, sketch] of Object.entries(sketches)) {
 			if (laid.title && laid.subtitle) {
 				assert.ok(bottom(laid.title.box) + GAP <= laid.subtitle.box.y);
 			}
-		});
-
-		test("wraps names and sketch headings at their specified widths and keeps every text block inside its box (invariant 4)", () => {
-			for (const { block, carrier } of textBlocks(laid)) {
-				assert.ok(inside(block.box, carrier), block.lines.join(" "));
-				assert.equal(block.box.height, block.lines.length * block.lineHeight);
+		},
+	],
+	[
+		"wraps every text at its width, except a single word, and keeps it whole inside its box (invariant 4)",
+		(sketch, laid) => {
+			const fits = (
+				line: string,
+				block: { weight: 600 | 700; size: number },
+				width: number,
+			) =>
+				!line.includes(" ") || measure(line, block.weight, block.size) <= width;
+			const blocks = [
+				...(laid.title
+					? [{ block: laid.title, carrier: laid.viewBox, text: sketch.title }]
+					: []),
+				...(laid.subtitle
+					? [
+							{
+								block: laid.subtitle,
+								carrier: laid.viewBox,
+								text: sketch.subtitle,
+							},
+						]
+					: []),
+			];
+			const sketchWidth = right(laid.variants[laid.variants.length - 1].area);
+			for (const { block } of blocks) {
 				for (const line of block.lines) {
 					assert.ok(
-						measure(line, block.weight, block.size) <= block.box.width,
+						fits(line, block, Math.max(sketchWidth, SKETCH_WRAP_MIN)),
 						line,
 					);
 				}
 			}
 			for (const variant of laid.variants) {
-				for (const line of variant.heading.lines) {
+				const { heading } = variant;
+				blocks.push({
+					block: heading,
+					carrier: variant.area,
+					text: variant.variant.name.text,
+				});
+				for (const line of heading.lines) {
 					assert.ok(
-						measure(line, variant.heading.weight, variant.heading.size) <=
-							Math.max(variant.column.width, NAME_WRAP_MIN),
+						fits(line, heading, Math.max(variant.column.width, NAME_WRAP_MIN)),
 						line,
 					);
 				}
 				for (const item of variant.items) {
-					if (item.kind !== "affordance" || !item.label) continue;
-					for (const line of item.label.lines) {
-						assert.ok(
-							!line.includes(" ") || measure(line, 600, em) <= LABEL_WRAP,
-							line,
-						);
+					if (item.kind === "place") {
+						blocks.push({
+							block: item.name,
+							carrier: item.frame,
+							text: item.place.name.text,
+						});
+						for (const line of item.name.lines) {
+							assert.ok(
+								fits(
+									line,
+									item.name,
+									Math.max(item.frame.width - 2 * GAP, NAME_WRAP_MIN),
+								),
+								line,
+							);
+						}
+					} else if (item.label) {
+						blocks.push({
+							block: item.label,
+							carrier: item.box,
+							text: item.affordance.text.text,
+						});
+						for (const line of item.label.lines) {
+							assert.ok(fits(line, item.label, LABEL_WRAP), line);
+						}
 					}
 				}
 			}
-			const lastVariant = laid.variants.at(-1);
-			assert.ok(lastVariant);
-			const sketchWidth = lastVariant.area.x + lastVariant.area.width;
-			for (const block of [laid.title, laid.subtitle]) {
-				if (!block) continue;
+			for (const { block, carrier, text } of blocks) {
+				assert.equal(
+					block.lines.join(" "),
+					text?.normalize("NFC").replace(/\s+/g, " ").trim(),
+				);
+				assert.ok(inside(block.box, carrier), block.lines.join(" "));
+				assert.equal(block.box.height, block.lines.length * block.lineHeight);
 				for (const line of block.lines) {
 					assert.ok(
 						measure(line, block.weight, block.size) <=
-							Math.max(sketchWidth, SKETCH_WRAP_MIN * em),
+							block.box.width + EPSILON,
 						line,
 					);
 				}
 			}
-		});
-
-		test("keeps everything inside the viewBox, with a margin, in integers (invariant 8)", () => {
+		},
+	],
+	[
+		"gives the places of a column its width, and the places of a row its height (invariant 5)",
+		(_, laid) => {
+			for (const variant of laid.variants) {
+				const boxOf = boxFinder(variant);
+				const places = placesOf(variant);
+				for (const { direction, contents, holder } of siblingGroups(variant)) {
+					const siblings = contents.filter(
+						(content) => content.kind === "place",
+					);
+					if (direction === "row") {
+						const row = boundingBox(contents.map(boxOf));
+						for (const place of siblings) {
+							assert.ok(
+								close(boxOf(place).height, row.height),
+								place.name.text,
+							);
+						}
+						continue;
+					}
+					const column = holder ? places.get(holder)?.frame : variant.column;
+					assert.ok(column);
+					for (const place of siblings) {
+						const frame = boxOf(place);
+						if (holder) {
+							assert.ok(
+								close(frame.x - column.x, right(column) - right(frame)),
+								place.name.text,
+							);
+						} else {
+							assert.ok(close(frame.width, column.width), place.name.text);
+						}
+					}
+				}
+			}
+		},
+	],
+	[
+		"lays each variant out whatever the others (invariant 7)",
+		(sketch, laid) => {
+			for (const [i, variant] of sketch.variants.entries()) {
+				const alone = laidOut({ variants: [variant] }).variants[0];
+				assert.deepEqual(
+					localGeometry(laid.variants[i]),
+					localGeometry(alone),
+					`variant ${i}`,
+				);
+			}
+		},
+	],
+	[
+		"keeps everything inside the viewBox, with a margin, in integers (invariant 8)",
+		(_, laid) => {
 			const { viewBox } = laid;
 			for (const n of [viewBox.x, viewBox.y, viewBox.width, viewBox.height]) {
 				assert.ok(Number.isInteger(n), String(n));
@@ -275,21 +573,73 @@ for (const [name, sketch] of Object.entries(sketches)) {
 				assert.ok(inside(variant.area, viewBox, MARGIN));
 				assert.ok(inside(variant.column, variant.area));
 				assert.ok(inside(variant.heading.box, variant.area));
+				for (const item of variant.items) {
+					assert.ok(
+						inside(
+							item.kind === "place" ? item.frame : item.box,
+							variant.column,
+						),
+					);
+				}
 			}
 			for (const block of [laid.title, laid.subtitle]) {
 				if (block) assert.ok(inside(block.box, viewBox, MARGIN));
 			}
-		});
+		},
+	],
+	[
+		"gives the same layout for the same input (invariant 9)",
+		(sketch, laid) => {
+			assert.deepEqual(laidOut(structuredClone(sketch)), laid);
+		},
+	],
+];
 
-		test("gives the same layout for the same input (invariant 9)", () => {
-			assert.deepEqual(laidOut(sketch), laid);
-		});
+const named: [string, Sketch][] = [
+	...fixtures.map((name): [string, Sketch] => [
+		`the ${name} fixture`,
+		fixture(name),
+	]),
+	...Object.entries(sketches),
+];
+
+for (const [name, sketch] of named) {
+	describe(`layout of ${name}`, () => {
+		const laid = laidOut(sketch);
+		for (const [title, check] of invariants) {
+			test(title, () => check(sketch, laid));
+		}
 	});
 }
 
-describe("layout of buttons", () => {
+const randomSketchList = randomSketches(200);
+
+describe("layout of 200 random sketches", () => {
+	for (const [title, check] of invariants) {
+		test(title, () => {
+			for (const [i, sketch] of randomSketchList.entries()) {
+				try {
+					check(sketch, laidOut(sketch));
+				} catch (error) {
+					throw new Error(`random sketch ${i}: ${JSON.stringify(sketch)}`, {
+						cause: error,
+					});
+				}
+			}
+		});
+	}
+});
+
+describe("layout", () => {
+	test("puts the first column's top left at (0, 0)", () => {
+		for (const [, sketch] of named) {
+			const { column } = laidOut(sketch).variants[0];
+			assert.deepEqual([column.x, column.y], [0, 0]);
+		}
+	});
+
 	test("centers each label in its button, in 1 em at weight 600", () => {
-		const [, button] = laidOut(sketches.minimal).variants[0].items;
+		const [, button] = laidOut(fixture("minimal")).variants[0].items;
 		assert.ok(button.kind === "affordance" && button.label);
 		const { label, box } = button;
 		assert.deepEqual(
@@ -305,96 +655,128 @@ describe("layout of buttons", () => {
 		assert.equal(long.label.lines.join(" "), long.affordance.text.text);
 	});
 
-	test("gives places the width of their column", () => {
-		const { items, column } = laidOut(sketches["several places and buttons"])
-			.variants[0];
-		for (const item of items) {
-			if (item.kind === "place") assert.equal(item.frame.width, column.width);
+	test("wraps a place name wider than its contents at 12 em", () => {
+		const [rules] = laidOut(fixture("long-text")).variants[0].items;
+		assert.ok(rules.kind === "place");
+		assert.ok(rules.name.lines.length >= 2, rules.name.lines.join("|"));
+		for (const line of rules.name.lines) {
+			assert.ok(measure(line, 700, rules.name.size) <= NAME_WRAP_MIN, line);
 		}
 	});
-});
 
-test("wraps long sketch headings and aligns variant names on a shared baseline", () => {
-	const laid = laidOut(sketches["long headings and variant names"]);
-	assert.ok(laid.title && laid.title.lines.length > 1);
-	assert.ok(laid.subtitle && laid.subtitle.lines.length > 1);
-	assert.notEqual(
-		laid.variants[0].heading.lines.length,
-		laid.variants[1].heading.lines.length,
-	);
-	assert.equal(
-		Math.abs(
-			bottom(laid.variants[0].heading.box) -
+	test("keeps a single overlong word whole, in a box that fits it", () => {
+		const { items } = laidOut(fixture("long-text")).variants[0];
+		const word = items.find(
+			(item) =>
+				item.kind === "affordance" &&
+				item.affordance.text.text.startsWith("Rhabarber"),
+		);
+		assert.ok(word?.kind === "affordance" && word.label);
+		assert.deepEqual(word.label.lines, [word.affordance.text.text]);
+		assert.ok(measure(word.label.lines[0], 600, em) > LABEL_WRAP);
+		assert.ok(inside(word.label.box, word.box));
+	});
+
+	test("draws an empty place as its frame and name only", () => {
+		const { items } = laidOut(fixture("empty-place")).variants[0];
+		const receipt = items.at(-1);
+		assert.ok(
+			receipt?.kind === "place" && receipt.place.name.text === "Receipt",
+		);
+		assert.ok(inside(receipt.name.box, receipt.frame, GAP));
+		const padding = receipt.name.box.y - receipt.frame.y;
+		assert.ok(
+			close(receipt.frame.height, receipt.name.box.height + 2 * padding),
+		);
+	});
+
+	test("sets the places of a row side by side at the row's height, contents at the top", () => {
+		const { items } = laidOut(fixture("rows")).variants[1];
+		const [booking, waiting] = items.filter(
+			(item) =>
+				item.kind === "place" &&
+				["Booking", "Waiting list"].includes(item.place.name.text),
+		);
+		assert.ok(booking.kind === "place" && waiting.kind === "place");
+		assert.equal(booking.frame.y, waiting.frame.y);
+		assert.equal(booking.frame.height, waiting.frame.height);
+		assert.ok(right(booking.frame) < waiting.frame.x);
+		assert.ok(
+			booking.name.box.height + 4 * em < booking.frame.height,
+			"the empty place is stretched",
+		);
+	});
+
+	test("never stretches an affordance", () => {
+		const alone = laidOut(fixture("minimal")).variants[0].items[1];
+		const stretched = laidOut({
+			variants: [
+				{
+					variant: "A · Plot list",
+					contains: [
+						{ place: "Plot list", contains: [{ affordance: "Book a plot" }] },
+						{ place: "A much, much wider place name, that widens the column" },
+					],
+				},
+			],
+		}).variants[0].items[1];
+		assert.ok(alone.kind === "affordance" && stretched.kind === "affordance");
+		assert.equal(stretched.box.width, alone.box.width);
+	});
+
+	test("wraps long sketch headings and aligns variant names on a shared baseline", () => {
+		const laid = laidOut(sketches["long headings and variant names"]);
+		assert.ok(laid.title && laid.title.lines.length > 1);
+		assert.ok(laid.subtitle && laid.subtitle.lines.length > 1);
+		assert.notEqual(
+			laid.variants[0].heading.lines.length,
+			laid.variants[1].heading.lines.length,
+		);
+		assert.ok(
+			close(
+				bottom(laid.variants[0].heading.box),
 				bottom(laid.variants[1].heading.box),
-		) < EPSILON,
-		true,
-	);
-	assert.deepEqual(
-		[laid.title.anchor, laid.title.x, laid.subtitle.anchor, laid.subtitle.x],
-		["start", 0, "start", 0],
-	);
-});
-
-test("variant independence: changing variant A only translates variant B horizontally (invariant 7)", () => {
-	const original = fixture("title-subtitle");
-	const before = laidOut(original);
-	const changed = laidOut({
-		...original,
-		variants: [
-			{
-				...original.variants[0],
-				contains: [{ place: "A much wider plot list" }],
-			},
-			original.variants[1],
-		],
-	});
-	const beforeB = before.variants[1];
-	const afterB = changed.variants[1];
-	const shift = afterB.column.x - beforeB.column.x;
-	assert.ok(shift > 0);
-	const localGeometry = (variant: Layout["variants"][number]) => ({
-		heading: {
-			x: variant.heading.x - variant.column.x,
-			baseline: variant.heading.baseline,
-			box: {
-				...variant.heading.box,
-				x: variant.heading.box.x - variant.column.x,
-			},
-			lines: variant.heading.lines,
-		},
-		items: variant.items.map((item) =>
-			item.kind === "place"
-				? {
-						kind: item.kind,
-						frame: { ...item.frame, x: item.frame.x - variant.column.x },
-						name: {
-							x: item.name.x - variant.column.x,
-							baseline: item.name.baseline,
-							box: { ...item.name.box, x: item.name.box.x - variant.column.x },
-						},
-					}
-				: {
-						kind: item.kind,
-						box: { ...item.box, x: item.box.x - variant.column.x },
-						label: item.label && {
-							x: item.label.x - variant.column.x,
-							baseline: item.label.baseline,
-							box: {
-								...item.label.box,
-								x: item.label.box.x - variant.column.x,
-							},
-						},
-					},
-		),
-	});
-	const rounded = (value: unknown) =>
-		JSON.parse(
-			JSON.stringify(value, (_key, item: unknown) =>
-				typeof item === "number" ? Number(item.toFixed(8)) : item,
 			),
 		);
-	assert.deepEqual(
-		rounded(localGeometry(beforeB)),
-		rounded(localGeometry(afterB)),
-	);
+		assert.deepEqual(
+			[laid.title.anchor, laid.title.x, laid.subtitle.anchor, laid.subtitle.x],
+			["start", 0, "start", 0],
+		);
+	});
+
+	test("variant independence: changing variant A only translates variant B horizontally (invariant 7)", () => {
+		const original = fixture("title-subtitle");
+		const before = laidOut(original);
+		const changed = laidOut({
+			...original,
+			variants: [
+				{
+					...original.variants[0],
+					contains: [{ place: "A much wider plot list" }],
+				},
+				original.variants[1],
+			],
+		});
+		assert.ok(changed.variants[1].column.x > before.variants[1].column.x);
+		assert.deepEqual(
+			localGeometry(before.variants[1]),
+			localGeometry(changed.variants[1]),
+		);
+	});
+
+	test("lays out places nested 20 deep", () => {
+		let content: Content = { place: "P20", contains: [{ affordance: "Go" }] };
+		for (let level = 19; level >= 1; level--) {
+			content =
+				level % 2 === 0
+					? { row: [content] }
+					: { place: `P${level}`, contains: [content] };
+		}
+		const laid = laidOut({
+			variants: [
+				{ variant: "A", contains: [content as Variant["contains"][number]] },
+			],
+		});
+		assert.equal(laid.variants[0].items.length, 12);
+	});
 });

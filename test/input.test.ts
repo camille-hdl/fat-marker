@@ -47,6 +47,137 @@ describe("readSketch", () => {
 	});
 });
 
+describe("readSketch, on nested places and rows", () => {
+	const nested = {
+		variants: [
+			{
+				variant: "A",
+				contains: [
+					{
+						row: [
+							{
+								place: "Booking",
+								contains: [
+									{ affordance: "Confirm" },
+									{
+										row: [
+											{ affordance: "Back" },
+											{ place: "Options", contains: [{ affordance: "Share" }] },
+										],
+									},
+								],
+							},
+							{ place: "Receipt" },
+						],
+					},
+				],
+			},
+		],
+	};
+
+	test("keeps rows, without key or field, and places at any depth", () => {
+		const [row] = readSketch(nested).variants[0].contents;
+		assert.ok(row.kind === "row");
+		assert.deepEqual(Object.keys(row), ["kind", "contents"]);
+		const [booking, receipt] = row.contents;
+		assert.ok(booking.kind === "place" && receipt.kind === "place");
+		assert.equal(booking.name.field, "variants[0].contains[0].row[0].place");
+		const [, inner] = booking.contents;
+		assert.ok(inner.kind === "row");
+		const [back, options] = inner.contents;
+		assert.ok(back.kind === "affordance" && options.kind === "place");
+		assert.equal(
+			options.name.field,
+			"variants[0].contains[0].row[0].contains[1].row[1].place",
+		);
+		assert.deepEqual(receipt.contents, []);
+	});
+
+	test("keys an affordance by the place holding it, through rows", () => {
+		const [row] = readSketch(nested).variants[0].contents;
+		assert.ok(row.kind === "row");
+		const [booking] = row.contents;
+		assert.ok(booking.kind === "place");
+		const [confirm, inner] = booking.contents;
+		assert.ok(confirm.kind === "affordance" && inner.kind === "row");
+		const [back, options] = inner.contents;
+		assert.ok(back.kind === "affordance" && options.kind === "place");
+		const [share] = options.contents;
+		assert.ok(share.kind === "affordance");
+		assert.deepEqual(
+			[booking.key, confirm.key, back.key, options.key, share.key],
+			[
+				"place\0A\0Booking",
+				"affordance\0A\0Booking\0Confirm",
+				"affordance\0A\0Booking\0Back",
+				"place\0A\0Options",
+				"affordance\0A\0Options\0Share",
+			],
+		);
+	});
+});
+
+/**
+ * A sketch whose variant holds `innermost` at `depth`, inside places at odd depths and rows at even depths.
+ */
+function nestedDeep(
+	depth: number,
+	innermost: unknown = { place: "Deepest" },
+): unknown {
+	let content = innermost;
+	for (let level = depth - 1; level >= 1; level--) {
+		content =
+			level % 2 === 0
+				? { row: [content] }
+				: { place: `P${level}`, contains: [content] };
+	}
+	return { variants: [{ variant: "A", contains: [content] }] };
+}
+
+/** The field of the content at `depth` in a `nestedDeep` sketch. */
+function nestedField(depth: number): string {
+	let field = "variants[0].contains[0]";
+	for (let level = 2; level <= depth; level++) {
+		field += level % 2 === 0 ? ".contains[0]" : ".row[0]";
+	}
+	return field;
+}
+
+/** Whether `error` is the depth error, on the content at depth 21 of a `nestedDeep` sketch. */
+function isDepthError(error: unknown): boolean {
+	const field = nestedField(21);
+	return (
+		error instanceof FatMarkerError &&
+		error.field === field &&
+		error.message === `${field}: places and rows nest at most 20 deep`
+	);
+}
+
+describe("readSketch, on the depth of places and rows", () => {
+	test("accepts places and rows 20 deep, with an affordance in the deepest place", () => {
+		const deepest = { place: "P20", contains: [{ affordance: "Go" }] };
+		assert.doesNotThrow(() => readSketch(nestedDeep(20, deepest)));
+	});
+
+	test("rejects a place 21 deep, naming it", () => {
+		assert.throws(() => readSketch(nestedDeep(21)), isDepthError);
+	});
+
+	test("rejects a row 21 deep, naming it", () => {
+		const row = { row: [{ place: "P22" }] };
+		assert.throws(() => readSketch(nestedDeep(21, row)), isDepthError);
+	});
+
+	test("rejects the 21st level before reading its keys", () => {
+		const place = { place: "P21", colour: "red" };
+		assert.throws(() => readSketch(nestedDeep(21, place)), isDepthError);
+	});
+
+	test("rejects places nested 10,000 deep with the same error, not a stack overflow", () => {
+		assert.throws(() => readSketch(nestedDeep(10_000)), isDepthError);
+	});
+});
+
 /** A sketch of one variant. */
 const withVariant = (variant: unknown) => ({ variants: [variant] });
 /** A sketch of one variant holding one place. */
@@ -108,14 +239,30 @@ describe("readSketch, on data outside this version", () => {
 			"variants[0].name",
 		],
 		[
-			"a row",
+			"an empty row",
 			withVariant({ variant: "A", contains: [{ row: [] }] }),
 			"variants[0].contains[0].row",
 		],
 		[
-			"a nested place",
-			withPlace({ place: "Plot list", contains: [{ place: "Map" }] }),
-			"variants[0].contains[0].contains[0].place",
+			"an affordance at the top of a variant",
+			withVariant({ variant: "A", contains: [{ affordance: "Go" }] }),
+			"variants[0].contains[0].affordance",
+		],
+		[
+			"an affordance in a row at the top of a variant",
+			withVariant({
+				variant: "A",
+				contains: [{ row: [{ affordance: "Go" }] }],
+			}),
+			"variants[0].contains[0].row[0].affordance",
+		],
+		[
+			"an unknown key on a row",
+			withVariant({
+				variant: "A",
+				contains: [{ row: [{ place: "P" }], x: 1 }],
+			}),
+			"variants[0].contains[0].x",
 		],
 		[
 			"a label on an affordance",

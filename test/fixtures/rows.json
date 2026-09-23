@@ -1,0 +1,84 @@
+{
+	"variants": [
+		{
+			"variant": "A · Map with a sidebar",
+			"contains": [
+				{
+					"row": [
+						{
+							"place": "Plot map",
+							"contains": [
+								{ "affordance": "Zoom in" },
+								{
+									"row": [
+										{ "affordance": "Previous plot" },
+										{ "affordance": "Next plot" }
+									]
+								},
+								{
+									"place": "Legend",
+									"contains": [{ "affordance": "Show water taps" }]
+								}
+							]
+						},
+						{
+							"place": "Sidebar",
+							"contains": [
+								{ "affordance": "Book a plot" },
+								{
+									"row": [
+										{
+											"place": "Filters",
+											"contains": [
+												{ "affordance": "Sunny plots" },
+												{ "affordance": "Shady plots" }
+											]
+										},
+										{
+											"row": [
+												{ "affordance": "Reset" },
+												{ "place": "Saved searches" }
+											]
+										}
+									]
+								}
+							]
+						}
+					]
+				},
+				{
+					"place": "Footer",
+					"contains": [
+						{
+							"row": [
+								{ "affordance": "Help" },
+								{ "affordance": "Contact the garden" }
+							]
+						}
+					]
+				}
+			]
+		},
+		{
+			"variant": "B · Stacked",
+			"contains": [
+				{
+					"place": "Plot map",
+					"contains": [{ "affordance": "Book a plot" }, { "place": "Legend" }]
+				},
+				{
+					"row": [
+						{ "place": "Booking" },
+						{
+							"place": "Waiting list",
+							"contains": [
+								{ "affordance": "Join the waiting list" },
+								{ "affordance": "Leave it" }
+							]
+						}
+					]
+				}
+			]
+		}
+	]
+}
