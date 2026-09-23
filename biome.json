@@ -1,0 +1,28 @@
+{
+	"$schema": "https://biomejs.dev/schemas/2.5.14/schema.json",
+	"vcs": {
+		"enabled": true,
+		"clientKind": "git",
+		"useIgnoreFile": true
+	},
+	"files": {
+		"includes": ["**", "!dist", "!fonts/metrics.json", "!test/snapshots"]
+	},
+	"formatter": {
+		"enabled": true
+	},
+	"linter": {
+		"enabled": true,
+		"rules": {
+			"preset": "recommended"
+		}
+	},
+	"assist": {
+		"enabled": true,
+		"actions": {
+			"source": {
+				"organizeImports": "on"
+			}
+		}
+	}
+}

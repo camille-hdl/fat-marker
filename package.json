@@ -1,0 +1,45 @@
+{
+	"name": "@camille-hdl/fat-marker",
+	"version": "0.0.0",
+	"type": "module",
+	"license": "0BSD AND OFL-1.1",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/camille-hdl/fat-marker.git"
+	},
+	"engines": {
+		"node": ">=22.14"
+	},
+	"bin": {
+		"fat-marker": "dist/bin.js"
+	},
+	"exports": {
+		".": {
+			"types": "./dist/index.d.ts",
+			"default": "./dist/index.js"
+		},
+		"./default-theme.json": "./default-theme.json",
+		"./package.json": "./package.json"
+	},
+	"files": [
+		"dist",
+		"fonts",
+		"default-theme.json"
+	],
+	"publishConfig": {
+		"access": "public"
+	},
+	"scripts": {
+		"test": "node --test \"test/**/*.test.ts\"",
+		"test:update": "node --test --test-update-snapshots \"test/**/*.test.ts\"",
+		"check": "biome check --write && tsc --noEmit",
+		"build": "node -e \"fs.rmSync('dist',{recursive:true,force:true})\" && tsc -p tsconfig.build.json && node -e \"fs.chmodSync('dist/bin.js',0o755)\"",
+		"prepack": "npm run build",
+		"build-font": "node scripts/build-font.ts"
+	},
+	"devDependencies": {
+		"@biomejs/biome": "^2.5.14",
+		"@types/node": "^22.20.4",
+		"typescript": "^7.0.2"
+	}
+}

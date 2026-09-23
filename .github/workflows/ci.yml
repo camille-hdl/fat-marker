@@ -1,0 +1,33 @@
+# from @camille-hdl/hill-chart@0.2.0, 738a559
+# adapted: without the packed-tarball smoke test, for now
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions: {}
+
+jobs:
+  test:
+    name: Node ${{ matrix.node }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    strategy:
+      matrix:
+        # 22 must be the latest 22.x: it runs the TypeScript sources without a flag.
+        node: [22, 24, 26]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ matrix.node }}
+          check-latest: true
+      - run: npm ci
+      - run: npx biome ci
+      - run: npx tsc --noEmit
+      - run: npm test

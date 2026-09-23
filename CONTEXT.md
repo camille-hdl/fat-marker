@@ -49,6 +49,22 @@ _Avoid_: connection, edge, link, wire
 An unnamed group that sets its elements side by side; it is not a place and no arrow can point at it.
 _Avoid_: group, stack, container, direction
 
+**Content**:
+What a variant, a place or a row holds, in order: places, affordances and rows.
+_Avoid_: children, element, item
+
+**Frame**:
+The drawn outline of a place, sharp-cornered, in four separate strokes.
+_Avoid_: border, box
+
+**Corridor**:
+The vertical strip right of a variant's column where arrows run to a place that is not next to their affordance; the variant reserves its width.
+_Avoid_: gutter, channel
+
+**Lane**:
+One arrow's track in a corridor, in data order.
+_Avoid_: track, slot
+
 **Name** (of a place):
 Short text that identifies a place, unique within its variant, drawn as the place's heading and used by arrows to point at it.
 _Avoid_: title (reserved for the sketch), label, id
@@ -65,6 +81,10 @@ Camille's palette (camillehdl.dev/palette), from which the default theme derives
 **Wobble**:
 The irregularity of the hand-drawn strokes, drawn from a seed so that the same input always yields the same image, and an unchanged element keeps its strokes.
 _Avoid_: jitter, noise, roughness
+
+**Wobble key**:
+The stable text, derived from the data alone, that seeds one drawn element's Wobble (ADR 0003).
+_Avoid_: id, seed (the seed is the theme's)
 
 **Accent**:
 The color of the arrows, set apart from the ink so the user's path stands out from the material of the sketch.
