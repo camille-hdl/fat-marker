@@ -43,12 +43,28 @@ npx @camille-hdl/fat-marker sketch.json -o sketch.png
 
 ## Data format
 
-A sketch has optional `title` and `subtitle`, and at least one `variants` entry. Each `variant` has a unique name and a
-non-empty `contains` list. Variants are drawn left to right under their names.
+A sketch has optional `title` and `subtitle`, and at least one `variants` entry. Variants are drawn left to right under
+their names.
 
-A `place` is a named screen, panel, dialog or menu. It can contain places, affordances and rows. Place names must be
-unique within a variant. Omit `contains` to draw an empty place. Keep names short: arrows refer to places by name in
-`to`.
+| Element | JSON | Holds |
+| --- | --- | --- |
+| sketch | `{ "title"?, "subtitle"?, "variants": [...] }` | variants, at least one |
+| variant | `{ "variant": "A · Name", "contains": [...] }` | places and rows |
+| place | `{ "place": "Name", "contains"?: [...] }` | places, affordances and rows; omit `contains` for an empty place |
+| affordance | `{ "affordance": "Text", "to"?: …, "mark"?: … }` | — |
+| copy | `{ "affordance": "Text", "read": true }` | — |
+| scribble | `{ "affordance": "Text", "read": true, "scribble": 3 }` | — |
+| row | `{ "row": [...] }` | places, affordances and rows |
+
+An affordance is always inside a place, even within a row. Lists are never empty. Any other key is an error, and every
+error names its field:
+
+```text
+fat-marker: sketch.json: variants[0].contains[0]: an affordance must be inside a place
+```
+
+A `place` is a named screen, panel, dialog or menu. Place names must be unique within a variant. Keep names short:
+arrows refer to places by name in `to`.
 
 An `affordance` is something to act on, drawn as a button by default. `to` names one or more destination places and draws
 arrows to them. Targets must be in the same variant, and cannot be the place holding the affordance or one of its
@@ -77,7 +93,7 @@ the field that needs attention.
 The command reads a JSON file, or stdin when the input is `-` or omitted. It writes SVG to stdout by default. Use `-o`
 to write a file; its `.svg` or `.png` extension selects the format. `--format` selects it explicitly. PNG output to a
 terminal is refused. Input files, stdin and theme files are limited to 1 MiB. Exit code 0 means success, 1 means invalid
-JSON/data/theme or an undrawable PNG, and 2 means a usage or file access error.
+JSON, data or theme, an input over 1 MiB, or a PNG that cannot be drawn; 2 means a usage or file access error.
 
 ```sh
 npx @camille-hdl/fat-marker sketch.json > sketch.svg
@@ -95,7 +111,14 @@ A theme is a flat JSON object. Set only the keys to change; unspecified keys kee
 `#rrggbb`, except `background` may be `"transparent"`, which draws no background and no arrow halos. The default theme
 is available as `@camille-hdl/fat-marker/default-theme.json`.
 
-Copy it into the current project to edit it:
+Installed in a project (`npm install @camille-hdl/fat-marker`), run the command as `npx @camille-hdl/fat-marker` or from
+an npm script. Start with a partial theme such as:
+
+```json
+{ "background": "transparent", "accent": "#990f3d", "seed": 7 }
+```
+
+Installed in a project, copy the full default theme into the current project to edit it:
 
 ```sh
 cp node_modules/@camille-hdl/fat-marker/default-theme.json theme.json
@@ -105,7 +128,7 @@ cp node_modules/@camille-hdl/fat-marker/default-theme.json theme.json
 | --- | --- | --- |
 | `background` | `#fff1e5` | Background color or `transparent` |
 | `ink` | `#262a33` | Main strokes and text |
-| `muted` | `#6b6259` | Secondary text and controls |
+| `muted` | `#6b6259` | The subtitle, and the text inside a field or select |
 | `accent` | `#0f5499` | Arrows |
 | `fontSize` | `18` | Text size, from 6 to 96 |
 | `seed` | `1` | Wobble seed, an integer from 0 to 4,294,967,295 |
@@ -133,7 +156,7 @@ const sketch = {
 };
 
 const svg = renderSvg(sketch); // string
-const png = await renderPng(sketch); // Promise<Uint8Array>
+const png = await renderPng(sketch, { seed: 7 }); // Promise<Uint8Array>
 await writeFile("sketch.svg", svg);
 await writeFile("sketch.png", png);
 
@@ -145,6 +168,9 @@ try {
 }
 ```
 
+`renderSvg(sketch, theme?)` returns a string; `renderPng(sketch, theme?)`, a `Promise<Uint8Array>`. `theme` is a partial
+theme, as in the Theme section. The package is ESM only.
+
 Both functions validate data and themes and throw `FatMarkerError` on invalid input; its `field` gives the field path.
 `renderSvg` is synchronous and linear in the number of elements, so a very large sketch blocks the event loop.
 `renderPng` is asynchronous: a usual sketch takes about 120–150 ms, and a sketch at the size limit can take up to 7.4 s.
@@ -154,8 +180,8 @@ The API reads no files and has no input size limit; set a limit before parsing u
 ## Determinism
 
 The same sketch and theme produce the same image, byte for byte. An element keeps its strokes when other elements or
-variants are added, removed or reordered. When that element's box changes size, its strokes use the same random draws on
-the new geometry: it looks alike, but is not identical.
+variants are added, removed or reordered, and when another variant changes. When that element's box changes size, its
+strokes use the same random draws on the new geometry: it looks alike, but is not identical.
 
 ## Fonts and PNG limits
 
@@ -203,5 +229,5 @@ The first npm publish is manual.
 
 ## License
 
-The code is under [0BSD](LICENSE). The embedded font, Atkinson Hyperlegible Next, is under
-[OFL-1.1](fonts/OFL.txt).
+The code is under [0BSD](https://github.com/camille-hdl/fat-marker/blob/main/LICENSE). The embedded font, Atkinson
+Hyperlegible Next, is under [OFL-1.1](https://github.com/camille-hdl/fat-marker/blob/main/fonts/OFL.txt).

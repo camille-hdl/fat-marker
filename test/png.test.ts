@@ -101,25 +101,27 @@ describe("renderPng", () => {
 
 	test("checks the title, subtitle, variant name and place name in document order", async () => {
 		const variants = [{ variant: "Ж", contains: [{ place: "Ж" }] }];
-		const fieldOf = async (sketch: Sketch) => {
+		const fieldOf = async (sketch: Sketch, field: string) => {
 			await assert.rejects(renderPng(sketch), (error: unknown) => {
 				assert.equal((error as { name: string }).name, "FatMarkerError");
-				assert.equal((error as { field: string }).field, expectedField);
+				assert.equal((error as { field: string }).field, field);
 				return true;
 			});
 		};
-		let expectedField = "title";
-		await fieldOf({ title: "Ж", subtitle: "Ж", variants });
-		expectedField = "subtitle";
-		await fieldOf({ title: "Plan", subtitle: "Ж", variants });
-		expectedField = "variants[0].variant";
-		await fieldOf({ title: "Plan", subtitle: "Week 1", variants });
-		expectedField = "variants[0].contains[0].place";
-		await fieldOf({
-			title: "Plan",
-			subtitle: "Week 1",
-			variants: [{ variant: "A", contains: [{ place: "Ж" }] }],
-		});
+		await fieldOf({ title: "Ж", subtitle: "Ж", variants }, "title");
+		await fieldOf({ title: "Plan", subtitle: "Ж", variants }, "subtitle");
+		await fieldOf(
+			{ title: "Plan", subtitle: "Week 1", variants },
+			"variants[0].variant",
+		);
+		await fieldOf(
+			{
+				title: "Plan",
+				subtitle: "Week 1",
+				variants: [{ variant: "A", contains: [{ place: "Ж" }] }],
+			},
+			"variants[0].contains[0].place",
+		);
 	});
 
 	test("does not check text that is represented by a scribble", async () => {
