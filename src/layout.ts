@@ -1,6 +1,6 @@
 // from @camille-hdl/hill-chart@0.2.0, 738a559
 // functions textBlock (+ anchor "middle", + field), boundingBox, grow, roundOutward, smallest and largest; placeHeading as sketchText (+ wrapping). The rest is new.
-import { routeArrows, stackedLanes } from "./arrows.ts";
+import { routeArrows, rowBands, stackedLanes } from "./arrows.ts";
 import { measure, type Weight, wrap } from "./font.ts";
 import type {
 	Mark,
@@ -205,9 +205,12 @@ export function layout(model: Model, theme: Theme): Layout {
  * arrows, through a corridor on the right of the column or down the lanes of their places.
  */
 function placeVariant(variant: ModelVariant, em: number): LaidVariant {
-	const lanes = stackedLanes(variant, em);
+	const reserved = {
+		lanes: stackedLanes(variant, em),
+		bands: rowBands(variant, em),
+	};
 	const contents = variant.contents.map((content) =>
-		measureContent(content, em, lanes),
+		measureContent(content, em, reserved),
 	);
 	const { width, height } = columnSize(contents, em);
 	const items: LaidVariant["items"] = [];
@@ -290,16 +293,22 @@ function moveVariant(variant: LaidVariant, x: number): LaidVariant {
 	};
 }
 
-/** The width each place keeps right of its contents for the lanes of its stacked starts, if it has any. */
-type Lanes = Map<ModelPlace, number>;
+/**
+ * The room the arrows take, read from the tree before placing: the width each place keeps right of its contents for the
+ * lanes of its stacked starts, and the height each row keeps under its tallest content for its band, if they have any.
+ */
+type Reserved = {
+	lanes: Map<ModelPlace, number>;
+	bands: Map<ModelRow, number>;
+};
 
 function measureContent(
 	content: ModelContent,
 	em: number,
-	lanes: Lanes,
+	reserved: Reserved,
 ): Measured {
-	if (content.kind === "place") return measurePlace(content, em, lanes);
-	if (content.kind === "row") return measureRow(content, em, lanes);
+	if (content.kind === "place") return measurePlace(content, em, reserved);
+	if (content.kind === "row") return measureRow(content, em, reserved);
 	const laid = measureAffordance(content, em);
 	return {
 		kind: "affordance",
@@ -316,13 +325,13 @@ function measureContent(
 function measurePlace(
 	place: ModelPlace,
 	em: number,
-	lanes: Lanes,
+	reserved: Reserved,
 ): MeasuredPlace {
 	const contents = place.contents.map((content) =>
-		measureContent(content, em, lanes),
+		measureContent(content, em, reserved),
 	);
 	const column = columnSize(contents, em);
-	const reserved = lanes.get(place) ?? 0;
+	const lanes = reserved.lanes.get(place) ?? 0;
 	const size = PLACE_NAME_SIZE * em;
 	const lines = wrap(place.name.text, nameWrap(column.width, em), 700, size);
 	const name = textBlock(lines, 700, size, "start", 0, 0, place.name.field);
@@ -332,10 +341,9 @@ function measurePlace(
 		place,
 		name,
 		contents,
-		lanes: reserved,
+		lanes,
 		width:
-			Math.max(name.box.width, column.width + reserved) +
-			2 * PLACE_PADDING * em,
+			Math.max(name.box.width, column.width + lanes) + 2 * PLACE_PADDING * em,
 		height: name.box.height + below + 2 * PLACE_PADDING * em,
 	};
 }
@@ -352,10 +360,14 @@ function nameWrap(
 	return Math.max(width / TEXT_ROOM, minimumEm * em);
 }
 
-/** A row: its contents side by side, apart, as tall as the tallest. */
-function measureRow(row: ModelRow, em: number, lanes: Lanes): MeasuredRow {
+/** A row: its contents side by side, apart, as tall as the tallest and its band under it. */
+function measureRow(
+	row: ModelRow,
+	em: number,
+	reserved: Reserved,
+): MeasuredRow {
 	const contents = row.contents.map((content) =>
-		measureContent(content, em, lanes),
+		measureContent(content, em, reserved),
 	);
 	let width = gapsAlong(contents, em);
 	let height = 0;
@@ -363,6 +375,7 @@ function measureRow(row: ModelRow, em: number, lanes: Lanes): MeasuredRow {
 		width += content.width;
 		height = Math.max(height, content.height);
 	}
+	height += reserved.bands.get(row) ?? 0;
 	const holdsPlace = contents.some(isPlaceLike);
 	return { kind: "row", contents, width, height, holdsPlace };
 }

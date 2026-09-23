@@ -3,6 +3,7 @@ import type {
 	ModelArrow,
 	ModelContent,
 	ModelPlace,
+	ModelRow,
 	ModelVariant,
 } from "./input.ts";
 import type {
@@ -41,7 +42,8 @@ const NESTED_MAX = 16;
 const RISE = 0.75;
 /**
  * How far above the bottom corner of a side edge its lowest arrival is: in the place's padding, below its contents, so
- * that its head stays inside the frame. The arrivals into the right edge of a hemmed place are anchored there.
+ * that its head stays inside the frame. The arrivals into the right edge of a hemmed place are anchored there, and
+ * those of the band of a row.
  */
 const LOW = 0.45;
 /** How far inside its target's frame an arrow ends, past the edge it reaches, so that its head reads as entering. */
@@ -81,14 +83,14 @@ export function routeArrows(
 		return { x: box.x + box.width, y: box.y + box.height / 2 };
 	});
 	const areaRight = column.x + column.width + corridor;
-	const hemmed = hemmedOf(variant);
+	const anchors = anchorsOf(variant, hemmedOf(variant));
 	const boxOf = (content: ModelPlace | ModelAffordance) =>
 		content.kind === "place"
 			? (places.get(content) as LaidPlace).frame
 			: (boxes.get(content) as Box);
 	const arrivals = spreadArrivals(
 		variant,
-		hemmed,
+		anchors,
 		routes,
 		starts,
 		places,
@@ -110,7 +112,7 @@ export function routeArrows(
 			column.x +
 			column.width +
 			(CORRIDOR_GAP + (lane++ + 0.5) * LANE_WIDTH) * em;
-		const route = hemmed.has(arrow.to) ? throughLaneFlat : throughLane;
+		const route = anchors.has(arrow.to) ? throughLaneFlat : throughLane;
 		return { arrow, side, path: route(start, x, end, TURN_RADIUS * em) };
 	});
 	return { arrows, corridor };
@@ -130,6 +132,27 @@ export function stackedLanes(
 		widths.set(stackedIn, (widths.get(stackedIn) ?? 0) + STACK_LANE * em);
 	}
 	return widths;
+}
+
+/**
+ * The height each row of `variant` adds under its tallest content for its band, read from the tree like the corridor:
+ * ARRIVAL_STEP for each arrival into the right edge of its hemmed places past the first, so that each of them runs
+ * under the contents of the places on its right.
+ */
+export function rowBands(
+	variant: ModelVariant,
+	em: number,
+): Map<ModelRow, number> {
+	const anchors = anchorsOf(variant, hemmedOf(variant));
+	const arrivals = new Map<ModelRow, number>();
+	for (const [i, { side }] of routesOf(variant).entries()) {
+		const row = anchors.get(variant.arrows[i].to);
+		if (side !== "right" || row?.kind !== "row") continue;
+		arrivals.set(row, (arrivals.get(row) ?? 0) + 1);
+	}
+	return new Map(
+		[...arrivals].map(([row, count]) => [row, (count - 1) * ARRIVAL_STEP * em]),
+	);
 }
 
 /**
@@ -213,18 +236,41 @@ function hemmedOf(variant: ModelVariant): Set<ModelPlace> {
 }
 
 /**
+ * Where each `hemmed` place of `variant` anchors the arrivals into its right edge: in the band of the outermost row
+ * that holds it, directly or through its rows, whose height it shares; itself, at its own bottom, for a place nested in
+ * a place of a row.
+ */
+function anchorsOf(
+	variant: ModelVariant,
+	hemmed: Set<ModelPlace>,
+): Map<ModelPlace, ModelRow | ModelPlace> {
+	const anchors = new Map<ModelPlace, ModelRow | ModelPlace>();
+	const visit = (contents: ModelContent[], row?: ModelRow) => {
+		for (const content of contents) {
+			if (content.kind === "row") visit(content.contents, row ?? content);
+			if (content.kind !== "place") continue;
+			if (hemmed.has(content)) anchors.set(content, row ?? content);
+			visit(content.contents);
+		}
+	};
+	visit(variant.contents);
+	return anchors;
+}
+
+/**
  * Where each arrow of `variant`, from its start in `starts`, reaches the side of its target its route gives it, in data
  * order. The arrows of stacked starts into one top edge reach it down their lanes, right of the contents of their place;
  * the other arrivals on it go at the `topSlots` left of those lanes. The arrivals on a left edge are at the heights of
  * their starts, as near as `levelHeights` allows. Those on a right edge go down every ARRIVAL_STEP from the middle of
- * the name's first line, or evenly down to LOW above the bottom corner of the frame when that would pass it; on the
- * right edge of a `hemmed` place, they go up instead, every ARRIVAL_STEP from LOW above the bottom corner, or evenly up
- * to the middle of the name's first line. They go to the arrows of the edge in an order that keeps them from crossing
- * before their heads. Each arrival is ENTRY_DEPTH inside the frame, past its edge.
+ * the name's first line, or evenly down to LOW above the bottom corner of the frame when that would pass it. Those on
+ * the right edge of a hemmed place go up instead from the bottom of its anchor in `anchors`, every ARRIVAL_STEP from
+ * LOW above it, or evenly up to the middle of the name's first line; those into the places of the band of one row, all
+ * together, as on one edge. They go to the arrows of the edge, or of the band, in an order that keeps them from
+ * crossing before their heads. Each arrival is ENTRY_DEPTH inside the frame, past its edge.
  */
 function spreadArrivals(
 	variant: ModelVariant,
-	hemmed: Set<ModelPlace>,
+	anchors: Map<ModelPlace, ModelRow | ModelPlace>,
 	routes: Route[],
 	starts: Point[],
 	places: Map<ModelPlace, LaidPlace>,
@@ -244,6 +290,10 @@ function spreadArrivals(
 		edges.set(key, edge);
 	}
 	const arrivals: Point[] = [];
+	const [depth, step] = [ENTRY_DEPTH * em, ARRIVAL_STEP * em];
+	const laidOf = (place: ModelPlace) => places.get(place) as LaidPlace;
+	/** The arrows into the right edges spread together, as into one edge: those of the places of one band, or of a place. */
+	const onRight = new Map<ModelRow | ModelPlace, number[]>();
 	/** `arrows` in the order of the `xs` they take, left to right, each on its way down `into` one of them. */
 	const nested = (
 		arrows: number[],
@@ -254,8 +304,12 @@ function spreadArrivals(
 			? [...arrows].sort((one, other) => starts[other].y - starts[one].y)
 			: nestedOrder(arrows, xs, starts, into);
 	for (const { to, side, arrows } of edges.values()) {
-		const { frame, name } = places.get(to) as LaidPlace;
-		const depth = ENTRY_DEPTH * em;
+		if (side === "right") {
+			const anchor = anchors.get(to) ?? to;
+			onRight.set(anchor, [...(onRight.get(anchor) ?? []), ...arrows]);
+			continue;
+		}
+		const { frame } = laidOf(to);
 		if (side === "top") {
 			const y = frame.y + depth;
 			const stacked = arrows.filter((i) => routes[i].stackedIn);
@@ -298,36 +352,45 @@ function spreadArrivals(
 			}
 			continue;
 		}
-		const top = name.box.y + name.lineHeight / 2;
-		const lowest = frame.y + frame.height - LOW * em;
-		const step = ARRIVAL_STEP * em;
-		if (side === "left") {
-			const order = [...arrows].sort(
-				(one, other) => starts[one].y - starts[other].y,
-			);
-			const heights = levelHeights(
-				order.map((i) => starts[i].y),
-				top,
-				lowest,
-				step,
-			);
-			for (const [rank, i] of order.entries()) {
-				arrivals[i] = { x: frame.x + depth, y: heights[rank] };
-			}
-			continue;
+		// The edge is a left edge.
+		const order = [...arrows].sort(
+			(one, other) => starts[one].y - starts[other].y,
+		);
+		const heights = levelHeights(
+			order.map((i) => starts[i].y),
+			...sideSpan(laidOf(to), em),
+			step,
+		);
+		for (const [rank, i] of order.entries()) {
+			arrivals[i] = { x: frame.x + depth, y: heights[rank] };
 		}
-		const spread =
-			arrows.length > 1
-				? Math.min(step, (lowest - top) / (arrows.length - 1))
-				: 0;
-		const first = hemmed.has(to) ? lowest - (arrows.length - 1) * spread : top;
-		const x = frame.x + frame.width - depth;
-		const middle = first + ((arrows.length - 1) * spread) / 2;
+	}
+	for (const arrows of onRight.values()) {
+		// in the order of their lanes, which is data order
+		arrows.sort((one, other) => one - other);
+		const to = variant.arrows[arrows[0]].to;
+		const [top, lowest] = sideSpan(laidOf(to), em);
+		const count = arrows.length;
+		const spread = count > 1 ? Math.min(step, (lowest - top) / (count - 1)) : 0;
+		const first = anchors.has(to) ? lowest - (count - 1) * spread : top;
+		const middle = first + ((count - 1) / 2) * spread;
 		for (const [rank, i] of laneOrder(arrows, starts, middle).entries()) {
-			arrivals[i] = { x, y: first + rank * spread };
+			const { frame } = laidOf(variant.arrows[i].to);
+			arrivals[i] = {
+				x: frame.x + frame.width - depth,
+				y: first + rank * spread,
+			};
 		}
 	}
 	return arrivals;
+}
+
+/**
+ * The heights between which the arrivals on a side edge of a place go, top to bottom: the middle of its name's first
+ * line, and LOW above its bottom corner, so that the head stays inside the frame.
+ */
+function sideSpan({ frame, name }: LaidPlace, em: number): [number, number] {
+	return [name.box.y + name.lineHeight / 2, frame.y + frame.height - LOW * em];
 }
 
 /** The right of the furthest right of `contents`, through rows; a place's frame holds its own contents. */
