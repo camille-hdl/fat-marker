@@ -97,7 +97,15 @@ const fixtures = [
 	"empty-place",
 	"marks",
 	"copy-scribble",
+	"arrows",
 ];
+
+/** The `<g class="arrow">` groups of `svg`, in drawing order: at least one. */
+function arrowGroups(svg: string): string[] {
+	const groups = svg.match(/<g class="arrow">[\s\S]*?<\/g>/g) ?? [];
+	assert.ok(groups.length > 0, "no arrow drawn");
+	return groups;
+}
 
 /** The `<g class="affordance">` groups of `svg`, in document order. */
 function affordanceGroups(svg: string): string[] {
@@ -623,6 +631,126 @@ describe("renderSvg", () => {
 			/<g class="affordance">[\s\S]*?<text [^>]*>(.*)<\/text>/,
 		)?.[1];
 		assert.ok((text?.match(/<tspan /g)?.length ?? 0) >= 2, text);
+	});
+
+	test("describes each variant's arrows after its places and affordances, in data order", () => {
+		const svg = renderSvg({
+			variants: [
+				{
+					variant: "A",
+					contains: [
+						{
+							place: "Plot list",
+							contains: [
+								{ affordance: "Book a plot", to: ["Booking", "Help"] },
+							],
+						},
+						{
+							place: "Booking",
+							contains: [{ affordance: "Back", to: "Plot list" }],
+						},
+						{ place: "Help" },
+					],
+				},
+				{
+					variant: "B",
+					contains: [
+						{
+							place: "Plot list",
+							contains: [{ affordance: "Book a plot", to: "Booking" }],
+						},
+						{ place: "Booking" },
+					],
+				},
+			],
+		});
+		assert.equal(
+			desc(svg),
+			[
+				"A",
+				"- place: Plot list",
+				"- affordance: Book a plot",
+				"- place: Booking",
+				"- affordance: Back",
+				"- place: Help",
+				"- arrow: Book a plot → Booking",
+				"- arrow: Book a plot → Help",
+				"- arrow: Back → Plot list",
+				"",
+				"B",
+				"- place: Plot list",
+				"- affordance: Book a plot",
+				"- place: Booking",
+				"- arrow: Book a plot → Booking",
+			].join("\n"),
+		);
+	});
+
+	test("draws every arrow in front, after every variant's items, each over its halo in the background color", () => {
+		const svg = renderSvg(fixture("arrows"));
+		const arrows = arrowGroups(svg);
+		assert.equal(arrows.length, 10);
+		const lastItem = Math.max(
+			svg.lastIndexOf('<g class="place">'),
+			svg.lastIndexOf('<g class="affordance">'),
+		);
+		assert.ok(lastItem < svg.indexOf('<g class="arrow">'));
+		for (const group of arrows) {
+			const strokes = [
+				...group.matchAll(
+					/<path d="([^"]+)" [^>]*stroke="(#[\da-f]+)" stroke-width="([\d.]+)"/g,
+				),
+			];
+			assert.equal(strokes.length, 2, group);
+			const [[, haloD, halo, haloWidth], [, arrowD, arrow, arrowWidth]] =
+				strokes;
+			assert.deepEqual([halo, arrow], ["#fff1e5", "#0f5499"]);
+			assert.equal(haloD, arrowD);
+			assert.ok(Number(haloWidth) > Number(arrowWidth));
+			assert.equal(arrowWidth, "2.9"); // 0.16 em
+		}
+	});
+
+	test("draws no halo on a transparent background", () => {
+		const svg = renderSvg(fixture("arrows"), { background: "transparent" });
+		assert.ok(!svg.includes("#fff1e5"));
+		for (const group of arrowGroups(svg)) {
+			assert.equal(group.match(/<path /g)?.length, 1, group);
+			assert.ok(group.includes('stroke="#0f5499"'), group);
+		}
+	});
+
+	test("draws an arrow in the theme's accent", () => {
+		const svg = renderSvg(fixture("arrows"), { accent: "#990f3d" });
+		for (const group of arrowGroups(svg)) {
+			assert.ok(group.includes('stroke="#990f3d"'), group);
+		}
+	});
+
+	test("ends each arrow with an open V head of two strokes whose tip is the end of its curve", () => {
+		for (const group of arrowGroups(renderSvg(fixture("arrows")))) {
+			const d = group.match(/<path d="([^"]+)"/)?.[1] ?? "";
+			const head = d.match(
+				/ (-?[\d.]+),(-?[\d.]+) M(-?[\d.]+),(-?[\d.]+) L(-?[\d.]+),(-?[\d.]+) L(-?[\d.]+),(-?[\d.]+)$/,
+			);
+			assert.ok(head, d);
+			const [end, wing, tip, otherWing] = [1, 3, 5, 7].map((i) => ({
+				x: Number(head[i]),
+				y: Number(head[i + 1]),
+			}));
+			assert.deepEqual(tip, end);
+			for (const point of [wing, otherWing]) {
+				const length = Math.hypot(point.x - tip.x, point.y - tip.y);
+				assert.ok(Math.abs(length - 0.8 * 18) < 0.2, String(length));
+			}
+			const spread = Math.acos(
+				((wing.x - tip.x) * (otherWing.x - tip.x) +
+					(wing.y - tip.y) * (otherWing.y - tip.y)) /
+					(Math.hypot(wing.x - tip.x, wing.y - tip.y) *
+						Math.hypot(otherWing.x - tip.x, otherWing.y - tip.y)),
+			);
+			assert.ok(spread > 0.85 && spread < 1.15, String(spread));
+		}
 	});
 
 	test("draws the same sketch the same way twice", () => {

@@ -1,7 +1,7 @@
 // from @camille-hdl/hill-chart@0.2.0, 738a559
 // functions dotPath (its parameter typed on its own), wobble (citing ADR 0003), shake, smooth, xy, fnv1a, mulberry32, num and escapeXml; stroke adapted from wavyLine; the rest is new
 import type { Theme } from "./input.ts";
-import type { Box, Point } from "./layout.ts";
+import type { Box, Cubic, Point } from "./layout.ts";
 
 /** Enough vertices for a dot to stay round once smoothed. */
 const DOT_VERTICES = 12;
@@ -27,6 +27,14 @@ const WAVE_LENGTH = 1.1;
 const WAVE_HEIGHT = 0.17;
 /** How far each point of a wavy line is shaken at most. */
 const WAVE_WOBBLE = 0.04;
+/** How far each inner control point of an arrow's cubics is shaken at most. */
+const ARROW_WOBBLE = 0.2;
+/** The length of each stroke of an arrow's head. */
+const HEAD_LENGTH = 0.8;
+/** The narrowest angle, in radians, between a stroke of an arrow's head and the arrow's last tangent. */
+const HEAD_ANGLE = 0.45;
+/** How much wider than HEAD_ANGLE that angle can be, in radians. */
+const HEAD_ANGLE_SPREAD = 0.1;
 
 export type Random = () => number;
 
@@ -97,6 +105,49 @@ export function wavy(
 		return shake(point, WAVE_WOBBLE * em, random);
 	});
 	return smooth(points);
+}
+
+/**
+ * An arrow along `path`: its cubics, only their inner control points shaken, then an open V head of two strokes at its
+ * end, along the last tangent drawn.
+ */
+export function arrow(path: Cubic[], em: number, random: Random): string {
+	const cubics = path.map((cubic) => shakenCubic(cubic, em, random));
+	const [, , control, tip] = cubics[cubics.length - 1];
+	return [
+		`M${xy(cubics[0][0])}`,
+		...cubics.map(([, c1, c2, end]) => `C${xy(c1)} ${xy(c2)} ${xy(end)}`),
+		head(tip, control, em, random),
+	].join(" ");
+}
+
+/** `cubic` with its two inner control points shaken: its ends stay where they join. */
+function shakenCubic(
+	[start, c1, c2, end]: Cubic,
+	em: number,
+	random: Random,
+): Cubic {
+	const amplitude = ARROW_WOBBLE * em;
+	return [
+		start,
+		shake(c1, amplitude, random),
+		shake(c2, amplitude, random),
+		end,
+	];
+}
+
+/** An open V of two strokes at `tip`, pointing away from `from`, each at its own angle. */
+function head(tip: Point, from: Point, em: number, random: Random): string {
+	const direction = Math.atan2(tip.y - from.y, tip.x - from.x);
+	const wing = (side: 1 | -1) => {
+		const angle =
+			direction + side * (HEAD_ANGLE + HEAD_ANGLE_SPREAD * random());
+		return {
+			x: tip.x - HEAD_LENGTH * em * Math.cos(angle),
+			y: tip.y - HEAD_LENGTH * em * Math.sin(angle),
+		};
+	};
+	return `M${xy(wing(1))} L${xy(tip)} L${xy(wing(-1))}`;
 }
 
 /** A sharp rectangle as four separate strokes, between its corners, each shaken. */

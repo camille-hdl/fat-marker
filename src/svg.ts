@@ -2,6 +2,7 @@
 // adapted: the same skeleton (toSvg, text), with <desc> rewritten, anchor "middle", and places and affordances drawn
 import { FONT_FAMILY } from "./font.ts";
 import {
+	arrow,
 	dotPath,
 	escapeXml,
 	num,
@@ -21,6 +22,7 @@ import type {
 import type {
 	Box,
 	LaidAffordance,
+	LaidArrow,
 	LaidPlace,
 	Layout,
 	Point,
@@ -30,6 +32,9 @@ import type {
 // Lengths in em, relative to theme.fontSize.
 const FRAME_STROKE = 0.2;
 const AFFORDANCE_STROKE = 0.14;
+const ARROW_STROKE = 0.16;
+/** The width of the halo under an arrow, in the background color. */
+const HALO_STROKE = 0.5;
 const BUTTON_RADIUS = 0.6;
 /** Glyphs shake as if the em were this share of it, so that their short strokes stay recognizable. */
 const GLYPH_WOBBLE = 0.4;
@@ -66,6 +71,9 @@ export function toSvg(layout: Layout, theme: Theme): string {
 				"</g>",
 			].join("\n"),
 		),
+		...layout.variants.flatMap(({ arrows }) =>
+			arrows.map((laid) => drawArrow(laid, theme)),
+		),
 		"</svg>",
 		"",
 	].join("\n");
@@ -73,12 +81,17 @@ export function toSvg(layout: Layout, theme: Theme): string {
 
 /**
  * The `<desc>` text, in the format of the fat-marker-sketch skill's step 2: each variant's name, then its places and
- * affordances in document order, variants apart by an empty line.
+ * affordances in document order, then its arrows in data order, variants apart by an empty line.
  */
 function describe(layout: Layout): string {
 	const variants = layout.variants
 		.map(({ variant }) =>
-			describeContents(variant.contents, [variant.name.text]).join("\n"),
+			[
+				...describeContents(variant.contents, [variant.name.text]),
+				...variant.arrows.map(
+					({ from, to }) => `- arrow: ${from.text.text} → ${to.name.text}`,
+				),
+			].join("\n"),
 		)
 		.join("\n\n");
 	return [
@@ -186,6 +199,22 @@ function affordanceStrokes(
 		case "handle":
 			return strokes(handle(glyph), glyphEm, random);
 	}
+}
+
+/** An arrow in the accent, over its halo in the background color, which a transparent background leaves out. */
+function drawArrow({ arrow: { key }, path }: LaidArrow, theme: Theme): string {
+	const em = theme.fontSize;
+	const d = arrow(path, em, wobble(theme, key));
+	const stroke = (color: string, width: number) =>
+		`  <path d="${d}" fill="none" stroke="${color}" stroke-width="${num(width * em)}" stroke-linecap="round" stroke-linejoin="round"/>`;
+	return [
+		'<g class="arrow">',
+		...(theme.background === "transparent"
+			? []
+			: [stroke(theme.background, HALO_STROKE)]),
+		stroke(theme.accent, ARROW_STROKE),
+		"</g>",
+	].join("\n");
 }
 
 /** The two strokes of a ▾ filling `box`. */

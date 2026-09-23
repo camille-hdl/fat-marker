@@ -1,0 +1,68 @@
+{
+	"title": "Plot booking",
+	"variants": [
+		{
+			"variant": "A · Separate booking screen",
+			"contains": [
+				{
+					"place": "Plot list",
+					"contains": [
+						{ "affordance": "Search plots", "mark": "field" },
+						{ "affordance": "Book a plot", "to": "Booking" },
+						{ "affordance": "Garden rules", "mark": "link", "to": "Rules" }
+					]
+				},
+				{
+					"place": "Booking",
+					"contains": [
+						{
+							"row": [
+								{
+									"place": "Plot form",
+									"contains": [
+										{ "affordance": "Your name", "mark": "field" },
+										{ "affordance": "Check the map", "to": "Map" }
+									]
+								},
+								{ "place": "Map" }
+							]
+						},
+						{
+							"affordance": "Confirm",
+							"to": ["Receipt", "Waiting list"]
+						},
+						{ "affordance": "Back to plots", "to": "Plot list" }
+					]
+				},
+				{
+					"place": "Receipt",
+					"contains": [
+						{ "affordance": "Done", "to": "Plot list" },
+						{ "affordance": "Book another plot", "to": "Plot list" }
+					]
+				},
+				{ "place": "Waiting list" },
+				{ "place": "Rules" }
+			]
+		},
+		{
+			"variant": "B · Inline booking",
+			"contains": [
+				{
+					"place": "Plot list",
+					"contains": [
+						{ "affordance": "Book a plot", "mark": "chevron", "to": "Booking" },
+						{
+							"place": "Booking",
+							"contains": [
+								{ "affordance": "Share with a neighbour", "mark": "checkbox" },
+								{ "affordance": "Confirm", "to": "Receipt" }
+							]
+						}
+					]
+				},
+				{ "place": "Receipt" }
+			]
+		}
+	]
+}

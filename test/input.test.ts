@@ -624,15 +624,341 @@ describe("readSketch, on the sketch and its variants", () => {
 				error.message === "variants[0].contains[0].row: must not be empty",
 		);
 	});
+});
 
-	test("rejects to as not supported yet", () => {
+describe("readSketch, on arrows", () => {
+	/** A variant "A" whose places `Plot list` and `Booking` hold `list` and `booking`. */
+	const twoPlaces = (list: unknown[], booking?: unknown[]) =>
+		withVariant({
+			variant: "A",
+			contains: [
+				{ place: "Plot list", contains: list },
+				{ place: "Booking", ...(booking && { contains: booking }) },
+			],
+		});
+
+	test("gives an arrow its affordance, its target place, its field and its Wobble key", () => {
+		const [variant] = readSketch(
+			twoPlaces([{ affordance: "Book a plot", to: "Booking" }]),
+		).variants;
+		const [list, booking] = variant.contents;
+		assert.ok(list.kind === "place" && booking.kind === "place");
+		const [book] = list.contents;
+		assert.ok(book.kind === "affordance");
+		assert.equal(variant.arrows.length, 1);
+		const [arrow] = variant.arrows;
+		assert.equal(arrow.from, book);
+		assert.equal(arrow.to, booking);
+		assert.equal(arrow.field, "variants[0].contains[0].contains[0].to");
+		assert.equal(
+			arrow.key,
+			[
+				"arrow",
+				"affordance",
+				"A",
+				"Plot list",
+				"Book a plot",
+				"0",
+				"Booking",
+			].join("\0"),
+		);
+	});
+
+	test("reads each entry of an array as an arrow, in data order, cited by its index", () => {
+		const { arrows } = readSketch(
+			withVariant({
+				variant: "A",
+				contains: [
+					{
+						place: "Plot list",
+						contains: [
+							{ affordance: "Book", to: ["Booking", " Help "] },
+							{ affordance: "Help", to: "Help" },
+						],
+					},
+					{ place: "Booking" },
+					{ place: "Help" },
+				],
+			}),
+		).variants[0];
+		assert.deepEqual(
+			arrows.map((arrow) => [arrow.from.text.text, arrow.to.name.text]),
+			[
+				["Book", "Booking"],
+				["Book", "Help"],
+				["Help", "Help"],
+			],
+		);
+		assert.deepEqual(
+			arrows.map((arrow) => arrow.field),
+			[
+				"variants[0].contains[0].contains[0].to[0]",
+				"variants[0].contains[0].contains[0].to[1]",
+				"variants[0].contains[0].contains[1].to",
+			],
+		);
+	});
+
+	test("resolves a place written further down, nested deeper, through rows, by its normalized name", () => {
+		const { arrows } = readSketch(
+			withVariant({
+				variant: "A",
+				contains: [
+					{
+						place: "Plot list",
+						contains: [{ affordance: "Options", to: "Share  options" }],
+					},
+					{
+						place: "Booking",
+						contains: [
+							{
+								row: [{ affordance: "Save" }, { place: " Share options " }],
+							},
+						],
+					},
+				],
+			}),
+		).variants[0];
+		assert.equal(arrows.length, 1);
+		assert.equal(arrows[0].to.name.text, "Share options");
+		assert.equal(
+			arrows[0].to.name.field,
+			"variants[0].contains[1].contains[0].row[1].place",
+		);
+	});
+
+	test("resolves a place nested in the place holding the affordance", () => {
+		const { arrows } = readSketch(
+			withPlace({
+				place: "Booking",
+				contains: [{ affordance: "More", to: "Options" }, { place: "Options" }],
+			}),
+		).variants[0];
+		assert.equal(arrows[0].to.name.text, "Options");
+	});
+
+	test("gives a variant without arrows none", () => {
+		assert.deepEqual(readSketch(minimal).variants[0].arrows, []);
+	});
+
+	test("does not add the targets to the affordance", () => {
+		const [list] = readSketch(
+			twoPlaces([{ affordance: "Book a plot", to: "Booking" }]),
+		).variants[0].contents;
+		assert.ok(list.kind === "place");
+		assert.ok(!("to" in list.contents[0]));
+	});
+
+	const field = "variants[0].contains[0].contains[0]";
+	const invalid: [string, unknown, string][] = [
+		[
+			"an empty to",
+			twoPlaces([{ affordance: "Go", to: "  " }]),
+			`${field}.to: must not be empty`,
+		],
+		[
+			"an empty array",
+			twoPlaces([{ affordance: "Go", to: [] }]),
+			`${field}.to: must not be empty`,
+		],
+		[
+			"an empty entry",
+			twoPlaces([{ affordance: "Go", to: ["Booking", ""] }]),
+			`${field}.to[1]: must not be empty`,
+		],
+		[
+			"a to that is not a text",
+			twoPlaces([{ affordance: "Go", to: 3 }]),
+			`${field}.to: expected a place name or an array of place names, got 3`,
+		],
+		[
+			"an entry that is not a text",
+			twoPlaces([{ affordance: "Go", to: ["Booking", null] }]),
+			`${field}.to[1]: expected a string`,
+		],
+		[
+			"a repeated target, normalized",
+			twoPlaces([{ affordance: "Go", to: ["Confirm", "Help", " Confirm"] }]),
+			`${field}.to[2]: duplicate target "Confirm" (same as to[0])`,
+		],
+		[
+			"copy with an arrow",
+			twoPlaces([{ affordance: "Go", read: true, to: "Booking" }]),
+			`${field}.to: copy (read: true) never carries an arrow`,
+		],
+		[
+			"copy with an arrow and a mark, on its arrow first",
+			twoPlaces([
+				{ affordance: "Go", mark: "link", read: true, to: "Booking" },
+			]),
+			`${field}.to: copy (read: true) never carries an arrow`,
+		],
+		[
+			"an arrow on copy only after the keys of the affordance",
+			twoPlaces([{ read: true, to: [], affordance: "Go" }]),
+			`${field}.to: must not be empty`,
+		],
+		[
+			"an unknown place, listing the variant's places",
+			withVariant({
+				variant: "A · Setup screen",
+				contains: [
+					{
+						place: "Invoice",
+						contains: [{ affordance: "Pay now", to: "Setp" }],
+					},
+					{ place: "Setup" },
+					{ place: "Confirm" },
+				],
+			}),
+			`${field}.to: unknown place "Setp"; places of variant "A · Setup screen": "Invoice", "Setup", "Confirm"`,
+		],
+		[
+			"an arrow to the place holding the affordance",
+			withVariant({
+				variant: "A",
+				contains: [
+					{
+						place: "Invoice",
+						contains: [{ affordance: "Pay now", to: ["Setup", "Invoice"] }],
+					},
+					{ place: "Setup" },
+				],
+			}),
+			`${field}.to[1]: "Invoice" holds this affordance ("Pay now"); an arrow leads to another place`,
+		],
+		[
+			"an arrow to a parent of the place holding the affordance",
+			withPlace({
+				place: "Billing",
+				contains: [
+					{
+						row: [
+							{
+								place: "Invoice",
+								contains: [{ affordance: "Pay now", to: "Billing" }],
+							},
+						],
+					},
+				],
+			}),
+			`variants[0].contains[0].contains[0].row[0].contains[0].to: "Billing" holds this affordance ("Pay now"); an arrow leads to another place`,
+		],
+	];
+
+	for (const [name, data, message] of invalid) {
+		test(`rejects ${name}`, () => {
+			assert.throws(
+				() => readSketch(data),
+				(error) =>
+					error instanceof FatMarkerError &&
+					error.message === message &&
+					error.field === message.slice(0, message.indexOf(": ")),
+			);
+		});
+	}
+
+	test("rejects an arrow to a place of another variant as unknown", () => {
 		assert.throws(
-			() => readSketch(withAffordance({ affordance: "Go", to: "P" })),
+			() =>
+				readSketch({
+					variants: [
+						{ variant: "A", contains: [{ place: "Receipt" }] },
+						{
+							variant: "B",
+							contains: [
+								{
+									place: "Booking",
+									contains: [{ affordance: "Pay", to: "Receipt" }],
+								},
+							],
+						},
+					],
+				}),
 			(error) =>
 				error instanceof FatMarkerError &&
 				error.message ===
-					"variants[0].contains[0].contains[0].to: not supported yet",
+					'variants[1].contains[0].contains[0].to: unknown place "Receipt"; places of variant "B": "Booking"',
 		);
+	});
+
+	test("reports a structural error further down before an unknown place further up in the same variant", () => {
+		assert.throws(
+			() =>
+				readSketch(
+					twoPlaces(
+						[{ affordance: "Go", to: "Nowhere" }],
+						[{ affordance: "Confirm", colour: "red" }],
+					),
+				),
+			(error) =>
+				error instanceof FatMarkerError &&
+				error.field === "variants[0].contains[1].contains[0].colour",
+		);
+	});
+
+	test("reports an unknown place in a variant before a structural error in the next one", () => {
+		assert.throws(
+			() =>
+				readSketch({
+					variants: [
+						{
+							variant: "A",
+							contains: [
+								{
+									place: "Booking",
+									contains: [{ affordance: "Go", to: "Nowhere" }],
+								},
+							],
+						},
+						{ variant: "B", contains: [{ nope: true }] },
+					],
+				}),
+			(error) =>
+				error instanceof FatMarkerError &&
+				error.field === "variants[0].contains[0].contains[0].to",
+		);
+	});
+
+	test("resolves targets in document order", () => {
+		assert.throws(
+			() =>
+				readSketch(
+					twoPlaces(
+						[{ affordance: "Go", to: ["Booking", "First"] }],
+						[{ affordance: "Back", to: "Second" }],
+					),
+				),
+			(error) =>
+				error instanceof FatMarkerError &&
+				error.field === "variants[0].contains[0].contains[0].to[1]",
+		);
+	});
+
+	test("escapes unsafe characters in the list of places, the affordance and the place", () => {
+		const cases = [
+			withVariant({
+				variant: "A\u202e",
+				contains: [
+					{ place: "P\u202e", contains: [{ affordance: "Go", to: "Q\u202e" }] },
+				],
+			}),
+			withPlace({
+				place: "P\u202e",
+				contains: [{ affordance: "Go\u202e", to: "P\u202e" }],
+			}),
+		];
+		for (const data of cases) {
+			assert.throws(
+				() => readSketch(data),
+				(error) => {
+					assert.ok(error instanceof FatMarkerError);
+					assert.ok(error.message.includes("\\u202e"), error.message);
+					assert.doesNotMatch(error.message, /[\p{C}\u2028\u2029]/u);
+					return true;
+				},
+			);
+		}
 	});
 });
 

@@ -211,7 +211,7 @@ function readVariant(
 	}
 	let name: Text | undefined;
 	let contents: (ModelPlace | ModelRow)[] | undefined;
-	const placeNames = new Map<string, string>();
+	const reading: VariantReading = { placeNames: new Map(), targets: new Map() };
 	for (const [key, value] of presentEntries(variant)) {
 		if (key === "variant") {
 			name = readNormalized(value, `${field}.variant`);
@@ -225,7 +225,7 @@ function readVariant(
 			names.set(name.text, index);
 		} else if (key === "contains") {
 			contents = readContents(value, `${field}.contains`, (content, at) =>
-				readPlaceOrRow(content, at, 1, placeNames),
+				readPlaceOrRow(content, at, 1, reading),
 			);
 		} else {
 			throw new FatMarkerError(
@@ -242,8 +242,17 @@ function readVariant(
 	}
 	const read: ModelVariant = { name, contents, arrows: [] };
 	giveWobbleKeys(read);
+	read.arrows = resolveArrows(read, reading.targets);
 	return read;
 }
+
+/** What the first pass over a variant collects for the second: its place names, and the targets of its affordances. */
+type VariantReading = {
+	/** The field of each place, by name. */
+	placeNames: Map<string, string>;
+	/** The names each affordance leads to, as written. */
+	targets: Map<ModelAffordance, Text[]>;
+};
 
 /** Reads a non-empty array of contents, each with `readContent`. */
 function readContents<T>(
@@ -269,7 +278,7 @@ function readPlaceOrRow(
 	content: unknown,
 	field: string,
 	depth: number,
-	placeNames: Map<string, string>,
+	reading: VariantReading,
 ): ModelPlace | ModelRow {
 	const kind = contentKind(content, field, depth);
 	if (kind === "affordance") {
@@ -280,15 +289,9 @@ function readPlaceOrRow(
 			content as Record<string, unknown>,
 			field,
 			depth,
-			(child, at, childDepth) =>
-				readPlaceOrRow(child, at, childDepth, placeNames),
+			(child, at, childDepth) => readPlaceOrRow(child, at, childDepth, reading),
 		);
-	return readPlace(
-		content as Record<string, unknown>,
-		field,
-		depth,
-		placeNames,
-	);
+	return readPlace(content as Record<string, unknown>, field, depth, reading);
 }
 
 /** Reads what a place, or a row inside a place, holds at `depth`: a place, an affordance or a row. */
@@ -296,7 +299,7 @@ function readPlaceContent(
 	content: unknown,
 	field: string,
 	depth: number,
-	placeNames: Map<string, string>,
+	reading: VariantReading,
 ): ModelContent {
 	const kind = contentKind(content, field, depth);
 	if (kind === "row")
@@ -305,16 +308,11 @@ function readPlaceContent(
 			field,
 			depth,
 			(child, at, childDepth) =>
-				readPlaceContent(child, at, childDepth, placeNames),
+				readPlaceContent(child, at, childDepth, reading),
 		);
 	if (kind === "place")
-		return readPlace(
-			content as Record<string, unknown>,
-			field,
-			depth,
-			placeNames,
-		);
-	return readAffordance(content as Record<string, unknown>, field);
+		return readPlace(content as Record<string, unknown>, field, depth, reading);
+	return readAffordance(content as Record<string, unknown>, field, reading);
 }
 
 type ContentKind = "place" | "affordance" | "row";
@@ -360,7 +358,7 @@ function readPlace(
 	place: Record<string, unknown>,
 	field: string,
 	depth: number,
-	placeNames: Map<string, string>,
+	reading: VariantReading,
 ): ModelPlace {
 	checkDepth(field, depth);
 	let name: Text | undefined;
@@ -368,19 +366,19 @@ function readPlace(
 	for (const [key, value] of presentEntries(place)) {
 		if (key === "place") {
 			name = readNormalized(value, `${field}.place`);
-			const first = placeNames.get(name.text);
+			const first = reading.placeNames.get(name.text);
 			if (first !== undefined) {
 				throw new FatMarkerError(
 					name.field,
 					`duplicate place ${show(name.text)} (same as ${escapeUnsafeToPrint(first)})`,
 				);
 			}
-			placeNames.set(name.text, field);
+			reading.placeNames.set(name.text, field);
 		} else if (key === "contains") {
 			contents = readContents(
 				value,
 				`${field}.contains`,
-				(content, at) => readPlaceContent(content, at, depth + 1, placeNames),
+				(content, at) => readPlaceContent(content, at, depth + 1, reading),
 				"must not be empty (omit it for an empty place)",
 			);
 		} else {
@@ -433,13 +431,18 @@ function checkDepth(field: string, depth: number): void {
 	}
 }
 
-/** Reads an affordance, whose Wobble key `giveWobbleKeys` sets once its variant's name is known. */
+/**
+ * Reads an affordance, whose Wobble key `giveWobbleKeys` sets once its variant's name is known, and keeps its targets in
+ * `reading` for `resolveArrows`.
+ */
 function readAffordance(
 	affordance: Record<string, unknown>,
 	field: string,
+	reading: VariantReading,
 ): ModelAffordance {
 	let text: Text | undefined;
 	let read = false;
+	let targets: Text[] | undefined;
 	let mark: Mark | undefined;
 	let scribble: number | undefined;
 	for (const [key, value] of presentEntries(affordance)) {
@@ -452,7 +455,7 @@ function readAffordance(
 		} else if (key === "scribble") {
 			scribble = readInteger(value, `${field}.scribble`, 1, MAX_SCRIBBLE);
 		} else if (key === "to") {
-			throw new FatMarkerError(`${field}.${key}`, "not supported yet");
+			targets = readTargets(value, `${field}.to`);
 		} else {
 			throw new FatMarkerError(
 				keyPath(field, key),
@@ -463,6 +466,12 @@ function readAffordance(
 	if (text === undefined) {
 		throw new FatMarkerError(`${field}.affordance`, "required");
 	}
+	if (read && targets !== undefined) {
+		throw new FatMarkerError(
+			`${field}.to`,
+			"copy (read: true) never carries an arrow",
+		);
+	}
 	if (read && mark !== undefined) {
 		throw new FatMarkerError(`${field}.mark`, "copy (read: true) has no mark");
 	}
@@ -472,7 +481,7 @@ function readAffordance(
 			"only copy (read: true) can be a scribble",
 		);
 	}
-	return {
+	const model: ModelAffordance = {
 		kind: "affordance",
 		text,
 		key: "",
@@ -480,6 +489,32 @@ function readAffordance(
 		...(mark && { mark }),
 		...(scribble && { scribble }),
 	};
+	if (targets) reading.targets.set(model, targets);
+	return model;
+}
+
+/** Reads the names in `to`: one name, cited as `…to`, or distinct names, each cited as `…to[i]`. */
+function readTargets(to: unknown, field: string): Text[] {
+	if (typeof to === "string") return [readNormalized(to, field)];
+	if (!Array.isArray(to)) {
+		throw new FatMarkerError(
+			field,
+			`expected a place name or an array of place names, got ${show(to)}`,
+		);
+	}
+	const firstIndex = new Map<string, number>();
+	return readContents(to, field, (entry, at) => {
+		const target = readNormalized(entry, at);
+		const first = firstIndex.get(target.text);
+		if (first !== undefined) {
+			throw new FatMarkerError(
+				at,
+				`duplicate target ${show(target.text)} (same as to[${first}])`,
+			);
+		}
+		firstIndex.set(target.text, firstIndex.size); // every entry before it is distinct
+		return target;
+	});
 }
 
 function readBoolean(value: unknown, field: string): boolean {
@@ -502,6 +537,46 @@ function readMark(value: unknown, field: string): Mark {
 		);
 	}
 	return mark;
+}
+
+/**
+ * The arrows of `variant`, in data order: each target of each affordance resolved to a place of the variant, other than
+ * the ones holding the affordance. The second pass over a variant, once its structure is read and its Wobble keys set.
+ */
+function resolveArrows(
+	variant: ModelVariant,
+	targets: Map<ModelAffordance, Text[]>,
+): ModelArrow[] {
+	const places = new Map<string, ModelPlace>();
+	for (const [content] of withHolders(variant.contents, [])) {
+		if (content.kind === "place") places.set(content.name.text, content);
+	}
+	const arrows: ModelArrow[] = [];
+	for (const [affordance, holders] of withHolders(variant.contents, [])) {
+		if (affordance.kind === "place") continue;
+		for (const target of targets.get(affordance) ?? []) {
+			const place = places.get(target.text);
+			if (place === undefined) {
+				throw new FatMarkerError(
+					target.field,
+					`unknown place ${show(target.text)}; places of variant ${show(variant.name.text)}: ${[...places.keys()].map(show).join(", ")}`,
+				);
+			}
+			if (holders.includes(place)) {
+				throw new FatMarkerError(
+					target.field,
+					`${show(place.name.text)} holds this affordance (${show(affordance.text.text)}); an arrow leads to another place`,
+				);
+			}
+			arrows.push({
+				from: affordance,
+				to: place,
+				key: ["arrow", affordance.key, place.name.text].join("\0"),
+				field: target.field,
+			});
+		}
+	}
+	return arrows;
 }
 
 /**
@@ -531,6 +606,22 @@ function giveKeysIn(place: ModelPlace, variant: string): void {
 				content.text.text,
 				String(rank),
 			].join("\0");
+		}
+	}
+}
+
+/**
+ * The places and affordances of `contents` at any depth, in document order, each with the places holding it, outermost
+ * first.
+ */
+function* withHolders(
+	contents: ModelContent[],
+	holders: ModelPlace[],
+): Generator<[ModelPlace | ModelAffordance, ModelPlace[]]> {
+	for (const content of throughRows(contents)) {
+		yield [content, holders];
+		if (content.kind === "place") {
+			yield* withHolders(content.contents, [...holders, content]);
 		}
 	}
 }

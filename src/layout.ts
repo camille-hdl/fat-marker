@@ -1,5 +1,6 @@
 // from @camille-hdl/hill-chart@0.2.0, 738a559
 // functions textBlock (+ anchor "middle", + field), boundingBox, grow, roundOutward, smallest and largest; placeHeading as sketchText (+ wrapping). The rest is new.
+import { routeArrows } from "./arrows.ts";
 import { measure, type Weight, wrap } from "./font.ts";
 import type {
 	Mark,
@@ -182,7 +183,10 @@ export function layout(model: Model, theme: Theme): Layout {
 	};
 }
 
-/** A variant's contents, stacked in data order in a column as wide as the widest, under the variant's name. */
+/**
+ * A variant's contents, stacked in data order in a column as wide as the widest, under the variant's name, and its
+ * arrows, through a corridor on the right of the column.
+ */
 function placeVariant(variant: ModelVariant, em: number): LaidVariant {
 	const contents = variant.contents.map((content) =>
 		measureContent(content, em),
@@ -202,13 +206,23 @@ function placeVariant(variant: ModelVariant, em: number): LaidVariant {
 		-HEADING_GAP * em - (lines.length * LINE_HEIGHT * size) / 2,
 		variant.name.field,
 	);
+	const { arrows, corridor } = routeArrows(
+		variant,
+		column,
+		items,
+		em,
+		PLACE_PADDING * em,
+	);
 	return {
 		variant,
 		heading,
 		column,
-		area: boundingBox([column, heading.box]),
+		area: boundingBox([
+			{ ...column, width: column.width + corridor },
+			heading.box,
+		]),
 		items,
-		arrows: [],
+		arrows,
 	};
 }
 
@@ -250,6 +264,12 @@ function moveVariant(variant: LaidVariant, x: number): LaidVariant {
 					}
 				: moveAffordance(item, item.box.x + dx, item.box.y),
 		),
+		arrows: variant.arrows.map((arrow) => ({
+			...arrow,
+			path: arrow.path.map(
+				(cubic) => cubic.map(({ x, y }) => ({ x: x + dx, y })) as Cubic,
+			),
+		})),
 	};
 }
 

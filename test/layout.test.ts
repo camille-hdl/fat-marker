@@ -5,6 +5,7 @@ import { readFileSync } from "node:fs";
 import { describe, test } from "node:test";
 import { measure } from "../src/font.ts";
 import {
+	type Affordance,
 	type Content,
 	type ModelAffordance,
 	type ModelContent,
@@ -15,15 +16,20 @@ import {
 } from "../src/input.ts";
 import {
 	type Box,
+	type LaidAffordance,
+	type LaidArrow,
 	type LaidPlace,
 	type Layout,
 	layout,
+	type Point,
 } from "../src/layout.ts";
 
 const theme = readTheme(undefined);
 const em = theme.fontSize;
 /** The smallest gap the invariants accept between two elements. */
 const GAP = 0.25 * em;
+/** Between two lanes of a corridor. */
+const LANE = 0.6 * em;
 /** The smallest margin the invariants accept between the content and the edge of the viewBox. */
 const MARGIN = 0.5 * em;
 /** Button labels wrap at this width. */
@@ -47,6 +53,7 @@ const fixtures = [
 	"empty-place",
 	"marks",
 	"copy-scribble",
+	"arrows",
 ];
 
 const sketches: Record<string, Sketch> = {
@@ -132,7 +139,8 @@ const marks = [
 
 /**
  * `count` random sketches, always the same: 1 to 4 variants of places and rows nested at most 4 deep, buttons, marks,
- * copy and scribbles, texts of 1 to 60 characters, with or without a title and a subtitle.
+ * copy and scribbles, texts of 1 to 60 characters, arrows among the allowed targets, with or without a title and a
+ * subtitle.
  */
 function randomSketches(count: number): Sketch[] {
 	const random = generator(20260923);
@@ -148,6 +156,29 @@ function randomSketches(count: number): Sketch[] {
 		let words = word(integer(1, 12));
 		while (words.length < length) words += ` ${word(integer(1, 12))}`;
 		return words.slice(0, length).trim();
+	};
+	/** Gives about half the affordances of `contents` that are not copy 1 to 3 targets, none of them holding it. */
+	const addArrows = (contents: Content[]) => {
+		const places: string[] = [];
+		const affordances: [Affordance, string[]][] = [];
+		const visit = (within: Content[], holders: string[]) => {
+			for (const content of within) {
+				if ("row" in content) visit(content.row, holders);
+				else if ("place" in content) {
+					places.push(content.place);
+					visit(content.contains ?? [], [...holders, content.place]);
+				} else if (!content.read) affordances.push([content, holders]);
+			}
+		};
+		visit(contents, []);
+		for (const [affordance, holders] of affordances) {
+			const allowed = places.filter((place) => !holders.includes(place));
+			if (allowed.length === 0 || random() < 0.5) continue;
+			const targets = new Set<string>();
+			const count = integer(1, Math.min(3, allowed.length));
+			while (targets.size < count) targets.add(pick(allowed));
+			affordance.to = count === 1 ? pick([...targets]) : [...targets];
+		}
 	};
 	const affordance = (): Content => {
 		const roll = random();
@@ -190,13 +221,12 @@ function randomSketches(count: number): Sketch[] {
 					),
 				};
 			};
-			return {
-				variant,
-				contains: Array.from(
-					{ length: integer(1, 3) },
-					() => content(1, false) as Variant["contains"][number],
-				),
-			};
+			const contains = Array.from(
+				{ length: integer(1, 3) },
+				() => content(1, false) as Variant["contains"][number],
+			);
+			addArrows(contains);
+			return { variant, contains };
 		});
 		return {
 			...(random() < 0.3 && { title: text() }),
@@ -322,6 +352,37 @@ function placesOf(variant: LaidVariant): Map<ModelPlace, LaidPlace> {
 	return places;
 }
 
+/** The laid out affordance of each affordance of `variant`. */
+function affordancesOf(
+	variant: LaidVariant,
+): Map<ModelAffordance, LaidAffordance> {
+	const affordances = new Map<ModelAffordance, LaidAffordance>();
+	for (const item of variant.items) {
+		if (item.kind === "affordance") affordances.set(item.affordance, item);
+	}
+	return affordances;
+}
+
+/** Whether `point` is on the `side` edge of `frame`, strictly between its corners. */
+function onEdge(point: Point, frame: Box, side: LaidArrow["side"]): boolean {
+	const between = (value: number, from: number, to: number) =>
+		value > from + EPSILON && value < to - EPSILON;
+	if (side === "top") {
+		return close(point.y, frame.y) && between(point.x, frame.x, right(frame));
+	}
+	const x = side === "left" ? frame.x : right(frame);
+	return close(point.x, x) && between(point.y, frame.y, bottom(frame));
+}
+
+/** Every point of an arrow's cubics, control points included. */
+const pointsOf = ({ path }: LaidArrow) => path.flat();
+const firstPoint = ({ path }: LaidArrow) => path[0][0];
+const lastPoint = ({ path }: LaidArrow) => path[path.length - 1][3];
+
+/** A name for an arrow in a failure message. */
+const arrowName = ({ arrow }: LaidArrow) =>
+	`${arrow.from.text.text} → ${arrow.to.name.text}`;
+
 /** A name for the content in a failure message. */
 function nameOf(content: ModelContent): string {
 	if (content.kind === "place") return content.name.text;
@@ -359,6 +420,12 @@ function localGeometry(variant: LaidVariant) {
 						),
 					},
 		),
+		arrows: variant.arrows.map(({ side, path }) => ({
+			side,
+			path: path.map((cubic) =>
+				cubic.map((point) => ({ ...point, x: point.x - dx })),
+			),
+		})),
 	};
 	return JSON.parse(
 		JSON.stringify(geometry, (_key, value: unknown) =>
@@ -670,6 +737,134 @@ const invariants: [string, (sketch: Sketch, laid: Layout) => void][] = [
 		"gives the same layout for the same input (invariant 9)",
 		(sketch, laid) => {
 			assert.deepEqual(laidOut(structuredClone(sketch)), laid);
+		},
+	],
+	[
+		"lays out each arrow of a variant, in data order",
+		(_, laid) => {
+			for (const variant of laid.variants) {
+				assert.deepEqual(
+					variant.arrows.map(({ arrow }) => arrow),
+					variant.variant.arrows,
+				);
+			}
+		},
+	],
+	[
+		"starts an arrow on the right side of its affordance at mid-height, and ends it on the side edge of its target (arrow invariant 1)",
+		(_, laid) => {
+			for (const variant of laid.variants) {
+				const [affordances, places] = [
+					affordancesOf(variant),
+					placesOf(variant),
+				];
+				for (const laidArrow of variant.arrows) {
+					const { arrow, side } = laidArrow;
+					const box = affordances.get(arrow.from)?.box;
+					const frame = places.get(arrow.to)?.frame;
+					assert.ok(box && frame);
+					const [first, last] = [firstPoint(laidArrow), lastPoint(laidArrow)];
+					const what = arrowName(laidArrow);
+					assert.ok(close(first.x, right(box)), what);
+					assert.ok(close(first.y, box.y + box.height / 2), what);
+					assert.ok(onEdge(last, frame, side), what);
+				}
+			}
+		},
+	],
+	[
+		"joins an arrow's cubics end to start, with continuous tangents (arrow invariant 3)",
+		(_, laid) => {
+			for (const variant of laid.variants) {
+				for (const laidArrow of variant.arrows) {
+					const { path } = laidArrow;
+					assert.ok(path.length > 0, arrowName(laidArrow));
+					for (let i = 1; i < path.length; i++) {
+						const [before, after] = [path[i - 1], path[i]];
+						const what = `${arrowName(laidArrow)}, cubic ${i}`;
+						assert.ok(close(before[3].x, after[0].x), what);
+						assert.ok(close(before[3].y, after[0].y), what);
+						const out = {
+							x: before[3].x - before[2].x,
+							y: before[3].y - before[2].y,
+						};
+						const into = {
+							x: after[1].x - after[0].x,
+							y: after[1].y - after[0].y,
+						};
+						const lengths =
+							Math.hypot(out.x, out.y) * Math.hypot(into.x, into.y);
+						assert.ok(lengths > 0, what);
+						assert.ok(
+							Math.abs(out.x * into.y - out.y * into.x) <= EPSILON * lengths,
+							what,
+						);
+						assert.ok(out.x * into.x + out.y * into.y > 0, what);
+					}
+				}
+			}
+		},
+	],
+	[
+		"keeps every point of an arrow inside its variant's area (arrow invariant 4)",
+		(_, laid) => {
+			for (const variant of laid.variants) {
+				for (const laidArrow of variant.arrows) {
+					for (const point of pointsOf(laidArrow)) {
+						assert.ok(
+							inside(pointBox(point), variant.area),
+							arrowName(laidArrow),
+						);
+					}
+				}
+			}
+		},
+	],
+	[
+		"gives each corridor arrow its own lane right of the column, in data order, 0.6 em apart, and nothing right of it (arrow invariant 5)",
+		(_, laid) => {
+			for (const variant of laid.variants) {
+				const corridor = variant.arrows.filter(({ side }) => side === "right");
+				// An arrow's lane is its rightmost point: the vertical run, or both control points of a single cubic, follow it.
+				const lanes = corridor.map((laidArrow) =>
+					pointsOf(laidArrow).reduce(
+						(x, point) => Math.max(x, point.x),
+						-Infinity,
+					),
+				);
+				for (const [k, lane] of lanes.entries()) {
+					const what = arrowName(corridor[k]);
+					assert.ok(lane > right(variant.column) + GAP, what);
+					if (k > 0) assert.ok(close(lane - lanes[k - 1], LANE), what);
+					const onLane = pointsOf(corridor[k]).filter(({ x }) =>
+						close(x, lane),
+					);
+					assert.ok(onLane.length >= 2, what);
+				}
+			}
+		},
+	],
+	[
+		"spreads the arrivals on one edge of a place, distinct and in data order (arrow invariant 6)",
+		(_, laid) => {
+			for (const variant of laid.variants) {
+				const edges = new Map<string, LaidArrow[]>();
+				for (const laidArrow of variant.arrows) {
+					const edge = `${laidArrow.arrow.to.key}\0${laidArrow.side}`;
+					const arrows = edges.get(edge) ?? [];
+					arrows.push(laidArrow);
+					edges.set(edge, arrows);
+				}
+				for (const arrows of edges.values()) {
+					const along = arrows.map((laidArrow) => {
+						const last = lastPoint(laidArrow);
+						return laidArrow.side === "top" ? last.x : last.y;
+					});
+					for (let i = 1; i < along.length; i++) {
+						assert.ok(along[i] > along[i - 1] + EPSILON, arrowName(arrows[i]));
+					}
+				}
+			}
 		},
 	],
 ];
@@ -986,6 +1181,135 @@ describe("layout", () => {
 			localGeometry(before.variants[1]),
 			localGeometry(changed.variants[1]),
 		);
+	});
+
+	/** The laid out arrows of `variant`, by the texts of their affordance and target. */
+	const arrowsOf = (variant: LaidVariant) =>
+		new Map(
+			variant.arrows.map((laidArrow) => [arrowName(laidArrow), laidArrow]),
+		);
+
+	test("starts the arrows of one affordance from one point", () => {
+		const arrows = arrowsOf(laidOut(fixture("arrows")).variants[0]);
+		const [receipt, waiting] = [
+			"Confirm → Receipt",
+			"Confirm → Waiting list",
+		].map((name) => arrows.get(name));
+		assert.ok(receipt && waiting);
+		assert.deepEqual(firstPoint(receipt), firstPoint(waiting));
+	});
+
+	test("spreads the arrivals on a place's right edge every 0.6 em down from the middle of its name's first line", () => {
+		const [variant] = laidOut(fixture("arrows")).variants;
+		const list = [...placesOf(variant).values()].find(
+			(place) => place.place.name.text === "Plot list",
+		);
+		assert.ok(list);
+		const ends = variant.arrows
+			.filter(({ arrow }) => arrow.to === list.place)
+			.map(lastPoint);
+		assert.equal(ends.length, 3);
+		const first = list.name.box.y + list.name.lineHeight / 2;
+		for (const [i, end] of ends.entries()) {
+			assert.ok(close(end.y, first + i * LANE), String(i));
+		}
+	});
+
+	test("spreads the arrivals evenly down to the bottom of the frame, less the padding, when 0.6 em apart would pass it", () => {
+		const [variant] = laidOut({
+			variants: [
+				{
+					variant: "A",
+					contains: [
+						{
+							place: "Plot list",
+							contains: ["Book", "Swap", "Share", "Leave"].map(
+								(affordance) => ({
+									affordance,
+									to: "Receipt",
+								}),
+							),
+						},
+						{ place: "Receipt" },
+					],
+				},
+			],
+		}).variants;
+		const receipt = variant.items.at(-1);
+		assert.ok(receipt?.kind === "place");
+		const ends = variant.arrows.map(lastPoint);
+		const top = receipt.name.box.y + receipt.name.lineHeight / 2;
+		const padding = receipt.name.box.y - receipt.frame.y;
+		const lowest = bottom(receipt.frame) - padding;
+		assert.ok(top + 3 * LANE > lowest, "the frame is too short for 0.6 em");
+		for (const [i, end] of ends.entries()) {
+			assert.ok(close(end.y, top + (i * (lowest - top)) / 3), String(i));
+		}
+	});
+
+	test("reserves 0.6 em of corridor right of the column for each arrow", () => {
+		const rights = [1, 2, 3].map((count) => {
+			const [variant] = laidOut({
+				variants: [
+					{
+						variant: "A",
+						contains: [
+							{
+								place: "Plot list",
+								contains: [
+									{
+										affordance: "Book",
+										to: ["Receipt", "Rules", "Help"].slice(0, count),
+									},
+								],
+							},
+							{ place: "Receipt" },
+							{ place: "Rules" },
+							{ place: "Help" },
+						],
+					},
+				],
+			}).variants;
+			assert.ok(right(variant.area) > right(variant.column) + count * LANE);
+			return right(variant.area);
+		});
+		assert.ok(close(rights[1] - rights[0], LANE));
+		assert.ok(close(rights[2] - rights[1], LANE));
+	});
+
+	test("routes a corridor arrow in three cubics: a turn into its lane, down the lane, a turn into the target", () => {
+		const arrow = arrowsOf(laidOut(fixture("arrows")).variants[0]).get(
+			"Back to plots → Plot list",
+		);
+		assert.ok(arrow);
+		assert.equal(arrow.side, "right");
+		assert.equal(arrow.path.length, 3);
+		const [, run] = arrow.path;
+		assert.ok(run.every((point) => close(point.x, run[0].x)));
+	});
+
+	test("routes a corridor arrow whose ends are close in height in a single cubic", () => {
+		const [variant] = laidOut({
+			variants: [
+				{
+					variant: "A",
+					contains: [
+						{
+							row: [
+								{ place: "Garden", contains: [{ place: "Shed" }] },
+								{
+									place: "Plot",
+									contains: [{ affordance: "Store tools", to: "Shed" }],
+								},
+							],
+						},
+					],
+				},
+			],
+		}).variants;
+		const [arrow] = variant.arrows;
+		assert.equal(arrow.side, "right");
+		assert.equal(arrow.path.length, 1);
 	});
 
 	test("lays out places nested 20 deep", () => {
