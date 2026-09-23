@@ -451,6 +451,39 @@ describe("renderSvg", () => {
 		}
 	});
 
+	test("draws a toggle as a pill without notches: no segment of its outline shorter than 0.1 em", () => {
+		const toggles = ["Show on the map", "Notify me", "Weekly digest"];
+		const svg = renderSvg({
+			variants: [
+				{
+					variant: "A",
+					contains: [
+						{
+							place: "P",
+							contains: toggles.map((affordance) => ({
+								affordance,
+								mark: "toggle",
+							})),
+						},
+					],
+				},
+			],
+		});
+		for (const group of affordanceGroups(svg)) {
+			const [{ text, d }] = drawnGroups(group);
+			// The points the outline goes through, where each of its curves ends: the last one closes it.
+			const points = [
+				...d.matchAll(/\d (-?\d+\.\d),(-?\d+\.\d)(?= [CZ])/g),
+			].map(([, x, y]) => ({ x: Number(x), y: Number(y) }));
+			assert.ok(points.length >= 12, text);
+			for (const [i, point] of points.entries()) {
+				const next = points[(i + 1) % points.length];
+				const length = Math.hypot(next.x - point.x, next.y - point.y);
+				assert.ok(length >= 0.1 * 18, `${text}: ${length} at ${i}`);
+			}
+		}
+	});
+
 	test("draws copy as bare text in ink, on the left", () => {
 		const [plot] = affordanceGroups(renderSvg(fixture("copy-scribble")));
 		assert.doesNotMatch(plot, /<path/);

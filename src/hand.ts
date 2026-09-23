@@ -116,7 +116,11 @@ export function rect(
 		.join(" ");
 }
 
-/** A rounded rectangle as one closed smooth path through shaken points on its outline, ARC_POINTS on each corner. */
+/**
+ * A rounded rectangle as one closed smooth path through shaken points on its outline, ARC_POINTS on each corner. Where
+ * the side before a corner has no length, as on the ends of a pill, its arc starts at the point the previous one ends
+ * at: that point is drawn once, or its two shaken copies would notch the outline.
+ */
 export function roundRect(
 	{ x, y, width, height }: Box,
 	radius: number,
@@ -124,24 +128,26 @@ export function roundRect(
 	random: Random,
 ): string {
 	const r = Math.min(radius, width / 2, height / 2);
-	// Each corner's center, and the angle its arc starts from, clockwise from the top left.
+	// Each corner's center, the angle its arc starts from, and the length of the side before it, clockwise from the top
+	// left.
 	const corners = [
-		{ x: x + r, y: y + r, from: Math.PI },
-		{ x: x + width - r, y: y + r, from: 1.5 * Math.PI },
-		{ x: x + width - r, y: y + height - r, from: 0 },
-		{ x: x + r, y: y + height - r, from: 0.5 * Math.PI },
+		{ x: x + r, y: y + r, from: Math.PI, side: height - 2 * r },
+		{ x: x + width - r, y: y + r, from: 1.5 * Math.PI, side: width - 2 * r },
+		{ x: x + width - r, y: y + height - r, from: 0, side: height - 2 * r },
+		{ x: x + r, y: y + height - r, from: 0.5 * Math.PI, side: width - 2 * r },
 	];
 	const points = corners.flatMap((corner) =>
 		Array.from({ length: ARC_POINTS }, (_, i) => {
 			const angle = corner.from + (i / (ARC_POINTS - 1)) * (Math.PI / 2);
-			const point = {
+			return {
 				x: corner.x + r * Math.cos(angle),
 				y: corner.y + r * Math.sin(angle),
 			};
-			return shake(point, ROUND_WOBBLE * em, random);
-		}),
+		}).filter((_, i) => i > 0 || corner.side > 0),
 	);
-	return smoothUneven(points);
+	return smoothUneven(
+		points.map((point) => shake(point, ROUND_WOBBLE * em, random)),
+	);
 }
 
 /**
