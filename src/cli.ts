@@ -43,6 +43,8 @@ Exit codes:
   2  usage error, or a file that cannot be read or written
 `;
 
+type Format = "svg" | "png";
+
 /** A failure to report on stderr, with the exit code it ends with. */
 class Failure extends Error {
 	readonly code: number;
@@ -133,21 +135,25 @@ function parseStrictly(args: string[]) {
 function outputFormat(
 	output: string | undefined,
 	requested: string | undefined,
-): "svg" | "png" {
-	if (requested !== undefined && requested !== "svg" && requested !== "png")
+): Format {
+	if (requested !== undefined && !isFormat(requested))
 		throw usageError(
 			`unknown format ${escapeUnsafeToPrint(JSON.stringify(requested))}; choose svg or png`,
 		);
 	if (output === undefined) return requested ?? "svg";
 	const extension = extname(output).toLowerCase();
-	if (extension !== ".svg" && extension !== ".png")
+	const fromOutput = extension.slice(1);
+	if (!isFormat(fromOutput))
 		throw usageError(
 			`cannot tell the format of ${output}; name it .svg or .png`,
 		);
-	const fromOutput = extension.slice(1) as "svg" | "png";
 	if (requested !== undefined && requested !== fromOutput)
 		throw usageError(`--format ${requested} conflicts with output ${output}`);
 	return fromOutput;
+}
+
+function isFormat(name: string): name is Format {
+	return name === "svg" || name === "png";
 }
 
 function usageError(message: string): Failure {
@@ -224,7 +230,7 @@ function parseJson(json: string, source: string): unknown {
 async function draw(
 	data: unknown,
 	source: string,
-	format: "svg" | "png",
+	format: Format,
 	themeFile?: { theme: unknown; path: string },
 ): Promise<string | Uint8Array> {
 	try {

@@ -13,6 +13,10 @@ function fixture(name: string): Sketch {
 
 const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
 
+function assertSameBytes(actual: Uint8Array, expected: Uint8Array): void {
+	assert.ok(Buffer.compare(actual, expected) === 0, "the bytes differ");
+}
+
 function pngSize(png: Uint8Array): { width: number; height: number } {
 	const view = new DataView(png.buffer, png.byteOffset, png.byteLength);
 	assert.equal(new TextDecoder().decode(png.subarray(12, 16)), "IHDR");
@@ -37,12 +41,12 @@ describe("renderPng", () => {
 		assert.deepEqual([...png.subarray(0, 8)], PNG_SIGNATURE);
 		const { width, height } = viewBoxSize(renderSvg(sketch));
 		assert.deepEqual(pngSize(png), { width: width * 2, height: height * 2 });
-		assert.deepEqual(png, concurrent);
+		assertSameBytes(png, concurrent);
 	});
 
 	test("renders identical bytes on repeated calls", async () => {
 		const sketch = fixture("rows");
-		assert.deepEqual(await renderPng(sketch), await renderPng(sketch));
+		assertSameBytes(await renderPng(sketch), await renderPng(sketch));
 	});
 
 	test("frees the rasterizer's WebAssembly memory after each render", async (t) => {
@@ -58,7 +62,10 @@ describe("renderPng", () => {
 		});
 		await renderPng(fixture("rows"));
 		assert.equal(rasterizerFree.mock.callCount(), 1);
-		assert.deepEqual(imageFrees.map((free) => free.mock.callCount()), [1]);
+		assert.deepEqual(
+			imageFrees.map((free) => free.mock.callCount()),
+			[1],
+		);
 	});
 
 	test("reports missing drawn characters at their field with escaped code points", async () => {
@@ -137,34 +144,49 @@ describe("renderPng", () => {
 			title: "W".repeat(44) + "i".repeat(12) + ".".repeat(3),
 			variants: [{ variant: "A", contains: [{ place: "P" }] }],
 		};
-		assert.deepEqual(
-			pngSize(await renderPng(horizontal, { fontSize: 96 })),
-			{ width: 16_384, height: 2_002 },
-		);
-		await assert.rejects(renderPng({ ...horizontal, title: `${horizontal.title}i` }, { fontSize: 95.366 }), {
-			name: "FatMarkerError",
-			field: "(root)",
-			message:
-				"(root): PNG of 16386 × 1992 pixels is over the 16384-pixel limit on a side; render SVG instead",
+		assert.deepEqual(pngSize(await renderPng(horizontal, { fontSize: 96 })), {
+			width: 16_384,
+			height: 2_002,
 		});
+		await assert.rejects(
+			renderPng(
+				{ ...horizontal, title: `${horizontal.title}i` },
+				{ fontSize: 95.366 },
+			),
+			{
+				name: "FatMarkerError",
+				field: "(root)",
+				message:
+					"(root): PNG of 16386 × 1992 pixels is over the 16384-pixel limit on a side; render SVG instead",
+			},
+		);
 
 		const vertical = {
-			variants: [{
-				variant: "A",
-				contains: Array.from({ length: 28 }, (_, i) => ({ place: `P${i}` })),
-			}],
-		};
-		assert.deepEqual(
-			pngSize(await renderPng(vertical, { fontSize: 68 })),
-			{ width: 852, height: 16_384 },
-		);
-		await assert.rejects(
-			renderPng({
-				variants: [{
+			variants: [
+				{
 					variant: "A",
-					contains: Array.from({ length: 301 }, (_, i) => ({ place: `P${i}` })),
-				}],
-			}, { fontSize: 6.5 }),
+					contains: Array.from({ length: 28 }, (_, i) => ({ place: `P${i}` })),
+				},
+			],
+		};
+		assert.deepEqual(pngSize(await renderPng(vertical, { fontSize: 68 })), {
+			width: 852,
+			height: 16_384,
+		});
+		await assert.rejects(
+			renderPng(
+				{
+					variants: [
+						{
+							variant: "A",
+							contains: Array.from({ length: 301 }, (_, i) => ({
+								place: `P${i}`,
+							})),
+						},
+					],
+				},
+				{ fontSize: 6.5 },
+			),
 			{
 				name: "FatMarkerError",
 				field: "(root)",
