@@ -40,14 +40,14 @@ function sketch(
 	};
 }
 
-/** The places and affordances drawn in `svg`, each with its text and the `d` of all its paths. */
+/** The places and affordances drawn in `svg`, each with its text, its lines joined by spaces, and the `d` of all its paths. */
 function drawnGroups(svg: string): { text: string; d: string }[] {
 	return [
 		...svg.matchAll(/<g class="(?:place|affordance)">([\s\S]*?)<\/g>/g),
 	].map(([, body]) => ({
 		text: [...body.matchAll(/<tspan [^>]*>(.*?)<\/tspan>/g)]
 			.map(([, text]) => text)
-			.join(""),
+			.join(" "),
 		d: [...body.matchAll(/<path d="([^"]+)"/g)].map(([, d]) => d).join(" "),
 	}));
 }
@@ -539,7 +539,7 @@ describe("renderSvg", () => {
 		const [plot] = affordanceGroups(renderSvg(fixture("copy-scribble")));
 		assert.doesNotMatch(plot, /<path/);
 		assert.match(plot, /<text text-anchor="start" [^>]*fill="#262a33"><tspan /);
-		assert.equal(drawnGroups(plot)[0].text, "Plot 12, sunny, next to theshed");
+		assert.equal(drawnGroups(plot)[0].text, "Plot 12, sunny, next to the shed");
 	});
 
 	test("draws the labels of a field and a select in muted, and every other label in ink", () => {
