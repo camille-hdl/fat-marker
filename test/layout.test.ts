@@ -46,6 +46,8 @@ const ENTRY_DEPTH = 0.8 * em;
 const LOW = 0.45 * em;
 /** Between two lanes of a place, right of its contents, for its stacked starts. */
 const STACK_LANE = 1 * em;
+/** How far right of the end of its text an arrow from an affordance without an outline starts. */
+const DEPARTURE_GAP = 0.4 * em;
 /** Inside a place's frame, around its name and contents. */
 const PLACE_PADDING = 1.15 * em;
 /** How far the ink of an arrow's tip reaches around its last point: half the arrow's stroke (`svg`'s ARROW_STROKE). */
@@ -483,6 +485,24 @@ function onEdge(point: Point, frame: Box, side: LaidArrow["side"]): boolean {
 }
 
 /** Every point of an arrow's cubics, control points included. */
+/**
+ * Where the arrows from `laid` start: on the right side of the outline of a button, a field or a select, at mid-height;
+ * DEPARTURE_GAP right of the end of the last line of any other affordance's label, as measured, at mid-height of that
+ * line.
+ */
+function departureOf({ affordance, box, label }: LaidAffordance): Point {
+	const { mark } = affordance;
+	if (mark === undefined || mark === "field" || mark === "select") {
+		return { x: right(box), y: box.y + box.height / 2 };
+	}
+	assert.ok(label);
+	const last = label.lines[label.lines.length - 1];
+	return {
+		x: label.x + measure(last, label.weight, label.size) + DEPARTURE_GAP,
+		y: label.box.y + (label.lines.length - 0.5) * label.lineHeight,
+	};
+}
+
 const pointsOf = ({ path }: LaidArrow) => path.flat();
 const firstPoint = ({ path }: LaidArrow) => path[0][0];
 const lastPoint = ({ path }: LaidArrow) => path[path.length - 1][3];
@@ -1045,7 +1065,7 @@ const invariants: [string, (sketch: Sketch, laid: Layout) => void][] = [
 		},
 	],
 	[
-		"starts an arrow on the right side of its affordance at mid-height, and ends it ENTRY_DEPTH inside its target, past the side edge it reaches, at least 0.45 em above the bottom corner of a side edge (arrow invariant 1)",
+		"starts an arrow on the right side of its affordance's outline at mid-height, or DEPARTURE_GAP right of the end of its text at mid-height of its last line, and ends it ENTRY_DEPTH inside its target, past the side edge it reaches, at least 0.45 em above the bottom corner of a side edge (arrow invariant 1)",
 		(_, laid) => {
 			for (const variant of laid.variants) {
 				const [affordances, places] = [
@@ -1054,13 +1074,14 @@ const invariants: [string, (sketch: Sketch, laid: Layout) => void][] = [
 				];
 				for (const laidArrow of variant.arrows) {
 					const { arrow, side } = laidArrow;
-					const box = affordances.get(arrow.from)?.box;
+					const source = affordances.get(arrow.from);
 					const frame = places.get(arrow.to)?.frame;
-					assert.ok(box && frame);
+					assert.ok(source && frame);
 					const first = firstPoint(laidArrow);
+					const start = departureOf(source);
 					const what = arrowName(laidArrow);
-					assert.ok(close(first.x, right(box)), what);
-					assert.ok(close(first.y, box.y + box.height / 2), what);
+					assert.ok(close(first.x, start.x), what);
+					assert.ok(close(first.y, start.y), what);
 					assert.ok(onEdge(arrivalOf(laidArrow), frame, side), what);
 				}
 			}
@@ -1816,6 +1837,62 @@ describe("layout", () => {
 		assert.ok(place, name);
 		return place;
 	};
+
+	/** The affordances of the one place `P`, over the place `Q` they all go to, laid out, and their arrows by affordance. */
+	const startsOf = (contains: Affordance[]) => {
+		const [variant] = laidOut({
+			variants: [
+				{ variant: "A", contains: [{ place: "P", contains }, { place: "Q" }] },
+			],
+		}).variants;
+		const affordances = [...affordancesOf(variant).values()];
+		return (text: string): [LaidAffordance, Point] => {
+			const laid = affordances.find(
+				({ affordance }) => affordance.text.text === text,
+			);
+			const laidArrow = variant.arrows.find(
+				({ arrow }) => arrow.from.text.text === text,
+			);
+			assert.ok(laid && laidArrow, text);
+			return [laid, firstPoint(laidArrow)];
+		};
+	};
+	/** The middle of the last line of `label`, in height. */
+	const lastLineMiddle = (label: LaidAffordance["label"]) => {
+		assert.ok(label);
+		return label.box.y + (label.lines.length - 0.5) * label.lineHeight;
+	};
+
+	test("starts an arrow from a link DEPARTURE_GAP right of the end of its underline, at mid-height of its last line", () => {
+		const text = "Try it with an example file from the archive";
+		const [link, start] = startsOf([
+			{ affordance: text, mark: "link", to: "Q" },
+		])(text);
+		assert.ok(link.label && link.glyph);
+		assert.ok(link.label.lines.length > 1);
+		assert.ok(close(start.x, right(link.glyph) + DEPARTURE_GAP));
+		assert.ok(close(start.y, lastLineMiddle(link.label)));
+	});
+
+	test("starts an arrow from a checkbox DEPARTURE_GAP right of the end of its label's last line as measured, at mid-height of that line, and a button's on the right side of its box", () => {
+		const [checkboxText, buttonText] = [
+			"Keep the notes of every unit in the archive",
+			"Next",
+		];
+		const startOf = startsOf([
+			{ affordance: checkboxText, mark: "checkbox", to: "Q" },
+			{ affordance: buttonText, to: "Q" },
+		]);
+		const [checkbox, start] = startOf(checkboxText);
+		const { label } = checkbox;
+		assert.ok(label && label.lines.length > 1);
+		const end = label.x + measure(label.lines[label.lines.length - 1], 600, em);
+		assert.ok(close(start.x, end + DEPARTURE_GAP));
+		assert.ok(close(start.y, lastLineMiddle(label)));
+		const [button, buttonStart] = startOf(buttonText);
+		assert.ok(close(buttonStart.x, right(button.box)));
+		assert.ok(close(buttonStart.y, button.box.y + button.box.height / 2));
+	});
 
 	test("classifies an arrow to the place just below its affordance's place as below: one cubic into the middle of its top edge, 0.8 em past it", () => {
 		// the button is the widest content, so the top edge has less than 1 em right of its start and a turn: the arrival
