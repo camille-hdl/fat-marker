@@ -70,8 +70,12 @@ An affordance with more of its place below it, whose arrow goes to the place jus
 _Avoid_: fan, stack
 
 **Hemmed** (place):
-A place with something right of it in a row, or inside such a place; the arrows into its right edge arrive at its bottom, under the names of the row.
+A place with something right of it in a row, or inside such a place; the arrows into its right edge arrive at its bottom, under the names of the row, in the band of the row that holds it.
 _Avoid_: bordered, blocked
+
+**Band** (of a row):
+The strip at the bottom of a row where the arrows into the right edges of its hemmed places arrive, each at its own height, the rightmost place lowest; the row is taller by 1 em for each of them past the first.
+_Avoid_: strip, gutter
 
 **Name** (of a place):
 Short text that identifies a place, unique within its variant, drawn as the place's heading and used by arrows to point at it.

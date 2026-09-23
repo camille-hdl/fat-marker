@@ -2407,6 +2407,7 @@ describe("layout", () => {
 				contains: [
 					{ affordance: "See the map", to: "Map" },
 					{ affordance: "See the shed", to: "Shed" },
+					{ affordance: "Book the shed", to: "Shed" },
 					{ affordance: "See the tools", to: "Tools" },
 				],
 			},
@@ -2510,7 +2511,130 @@ describe("layout", () => {
 		}
 	});
 
-	test("anchors the arrivals on the right edge of a hemmed place at its bottom: the lowest 0.45 em above the corner, then every 1 em up", () => {
+	/** The length of each stroke of an arrow's head (`hand`'s HEAD_LENGTH): it is drawn along this much of the arrow's end. */
+	const HEAD_LENGTH = 0.8 * em;
+	/** The smallest space the band leaves between an arrow's head and another arrow. */
+	const HEAD_CLEARANCE = 0.5 * em;
+
+	/** The distance from `point` to the segment from `a` to `b`. */
+	const toSegment = (point: Point, a: Point, b: Point) => {
+		const [dx, dy] = [b.x - a.x, b.y - a.y];
+		const along = dx * (point.x - a.x) + dy * (point.y - a.y);
+		const t = Math.max(0, Math.min(1, along / (dx * dx + dy * dy || 1)));
+		return Math.hypot(point.x - a.x - t * dx, point.y - a.y - t * dy);
+	};
+
+	/**
+	 * What spoils the arrivals of `variant`: an arrow that comes within HEAD_CLEARANCE of another arrow's head, and an
+	 * arrow whose last cubic runs level through a place's name or an affordance's box, its label in it.
+	 */
+	const spoiledArrivals = (variant: LaidVariant): string[] => {
+		const spoiled: string[] = [];
+		const texts = variant.items.map((item) =>
+			item.kind === "place"
+				? { text: item.place.name.text, box: item.name.box }
+				: { text: item.affordance.text.text, box: item.box },
+		);
+		for (const laidArrow of variant.arrows) {
+			const tip = lastPoint(laidArrow);
+			const head = polyline(laidArrow.path.slice(-1)).filter(
+				(point) => Math.hypot(point.x - tip.x, point.y - tip.y) <= HEAD_LENGTH,
+			);
+			for (const other of variant.arrows) {
+				if (other === laidArrow) continue;
+				const points = polyline(other.path);
+				const near = head.some((point) =>
+					points.some(
+						(to, i) =>
+							i > 0 && toSegment(point, points[i - 1], to) < HEAD_CLEARANCE,
+					),
+				);
+				if (near) {
+					spoiled.push(
+						`${arrowName(other)} by the head of ${arrowName(laidArrow)}`,
+					);
+				}
+			}
+			const last = laidArrow.path[laidArrow.path.length - 1];
+			const [from, , , to] = last;
+			if (!last.every((point) => close(point.y, to.y))) continue;
+			for (const { text, box } of texts) {
+				const across =
+					box.y < to.y &&
+					to.y < bottom(box) &&
+					Math.min(from.x, to.x) < right(box) &&
+					Math.max(from.x, to.x) > box.x;
+				if (across) spoiled.push(`${arrowName(laidArrow)} across "${text}"`);
+			}
+		}
+		return spoiled;
+	};
+
+	test("keeps each arrival into the band of a row 0.5 em clear of the other arrows, and off every name and label: rowBack", () => {
+		const [variant] = laidOut({
+			variants: [
+				{
+					variant: "rowBack",
+					contains: hemmed["a row, and arrows back up into its places"],
+				},
+			],
+		}).variants;
+		assert.deepEqual(spoiledArrivals(variant), []);
+	});
+
+	test("keeps each arrival into the band of a row 0.5 em clear of the other arrows, and off every name and label: mixedEdge", () => {
+		const [variant] = laidOut({
+			variants: [
+				{
+					variant: "mixedEdge",
+					contains: hemmed["a row whose places get corridor and direct arrows"],
+				},
+			],
+		}).variants;
+		assert.deepEqual(spoiledArrivals(variant), []);
+	});
+
+	/** `contents`, with no arrows. */
+	const withoutArrows = (contents: Content[]): Content[] =>
+		contents.map((content) => {
+			if ("row" in content) return { row: withoutArrows(content.row) };
+			if ("place" in content) {
+				return { ...content, contains: withoutArrows(content.contains ?? []) };
+			}
+			const { to: _, ...affordance } = content;
+			return affordance;
+		});
+
+	test("makes a row taller than its tallest content by its band: 1 em for each arrival into its hemmed places past the first, and its places share that height", () => {
+		const [row, booking] = hemmed[
+			"a row, and arrows back up into its places"
+		].slice(1) as [{ row: Content[] }, Content];
+		const [map, ...onRight] = row.row;
+		for (const contains of [
+			[row, booking],
+			[{ row: [map, { row: onRight }] }, booking],
+		] as Variant["contains"][]) {
+			const [withBand, tallest] = [
+				contains,
+				withoutArrows(contains) as Variant["contains"],
+			].map((contains) => {
+				const [variant] = laidOut({
+					variants: [{ variant: "A", contains }],
+				}).variants;
+				const frames = ["Map", "Shed", "Tools"].map(
+					(name) => placeNamed(variant, name).frame,
+				);
+				for (const frame of frames) {
+					assert.ok(close(frame.height, frames[0].height));
+				}
+				return frames[0].height;
+			});
+			// See the map and Back to map into Map, See the shed and Book the shed into Shed: 4 arrivals
+			assert.ok(close(withBand - tallest, 3 * em), String(withBand - tallest));
+		}
+	});
+
+	test("anchors the arrivals into the hemmed places of a row in its band, at its bottom: the lowest 0.45 em above it, then every 1 em up, the rightmost place lowest", () => {
 		const [variant] = laidOut({
 			variants: [
 				{
@@ -2525,6 +2649,7 @@ describe("layout", () => {
 									),
 								},
 								{ place: "Shed" },
+								{ place: "Tools" },
 							],
 						},
 						{
@@ -2532,20 +2657,30 @@ describe("layout", () => {
 							contains: [
 								{ affordance: "See the map", to: "Map" },
 								{ affordance: "Show the map", to: "Map" },
+								{ affordance: "See the shed", to: "Shed" },
 							],
 						},
 					],
 				},
 			],
 		}).variants;
-		const map = placeNamed(variant, "Map");
-		const ends = variant.arrows.map(lastPoint).map(({ y }) => y);
-		const lowest = bottom(map.frame) - 0.45 * em;
-		assert.deepEqual(
-			ends.map((y) => close(y, lowest) || close(y, lowest - ARRIVAL_STEP)),
-			[true, true],
+		const [map, shed] = ["Map", "Shed"].map((name) =>
+			placeNamed(variant, name),
 		);
-		assert.ok(!close(ends[0], ends[1]));
+		const lowest = bottom(map.frame) - LOW;
+		const arrows = arrowsOf(variant);
+		// both from below, into Map: the outer lane, Show the map's, highest (decision 28)
+		for (const [name, place, rank] of [
+			["See the map → Map", map, 1],
+			["Show the map → Map", map, 2],
+			["See the shed → Shed", shed, 0],
+		] as const) {
+			const arrow = arrows.get(name);
+			assert.ok(arrow, name);
+			const end = lastPoint(arrow);
+			assert.ok(close(end.x, right(place.frame) - ENTRY_DEPTH), name);
+			assert.ok(close(end.y, lowest - rank * ARRIVAL_STEP), name);
+		}
 	});
 
 	test("routes a corridor arrow into a hemmed place with a flat last turn: a circular quarter turn to the height of its arrival, then straight into the edge", () => {
