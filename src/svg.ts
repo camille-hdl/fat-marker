@@ -22,7 +22,6 @@ import type {
 import type {
 	Box,
 	LaidAffordance,
-	LaidArrow,
 	LaidPlace,
 	Layout,
 	Point,
@@ -42,6 +41,7 @@ const GLYPH_WOBBLE = 0.4;
 /** Serializes a layout as a standalone, accessible SVG document. */
 export function toSvg(layout: Layout, theme: Theme): string {
 	const { viewBox, title, subtitle } = layout;
+	const arrows = arrowStrokes(layout, theme);
 	const [x, y, width, height] = [
 		viewBox.x,
 		viewBox.y,
@@ -59,21 +59,29 @@ export function toSvg(layout: Layout, theme: Theme): string {
 				]),
 		...(title ? [text(title, theme.ink)] : []),
 		...(subtitle ? [text(subtitle, theme.muted)] : []),
-		...layout.variants.map(({ heading, items }) =>
+		...layout.variants.map(({ items }) =>
 			[
 				'<g class="variant">',
-				text(heading, theme.ink),
-				...items.map((item) =>
+				...items.flatMap((item) =>
 					item.kind === "place"
-						? drawPlace(item, theme)
+						? [drawPlace(item, theme)]
 						: drawAffordance(item, theme),
 				),
 				"</g>",
 			].join("\n"),
 		),
-		...layout.variants.flatMap(({ arrows }) =>
-			arrows.map((laid) => drawArrow(laid, theme)),
+		...(theme.background === "transparent"
+			? []
+			: arrows.map((d) => drawHalo(d, theme))),
+		...layout.variants.map(({ heading, items }) =>
+			[
+				'<g class="text">',
+				text(heading, theme.ink),
+				...items.flatMap((item) => labelOf(item, theme)),
+				"</g>",
+			].join("\n"),
 		),
+		...arrows.map((d) => drawArrow(d, theme)),
 		"</svg>",
 		"",
 	].join("\n");
@@ -135,34 +143,37 @@ function kindOf({ read, mark, scribble }: ModelAffordance): string {
 	return mark ? ` (${mark})` : "";
 }
 
-/** A place's frame, in four strokes, and its name. */
-function drawPlace({ place, frame, name }: LaidPlace, theme: Theme): string {
+/** A place's frame, in four strokes. */
+function drawPlace({ place, frame }: LaidPlace, theme: Theme): string {
 	const em = theme.fontSize;
 	return [
 		'<g class="place">',
 		`  <path d="${rect(frame, em, wobble(theme, place.key))}" fill="none" stroke="${theme.ink}" stroke-width="${num(FRAME_STROKE * em)}" stroke-linecap="round" stroke-linejoin="round"/>`,
-		`  ${text(name, theme.ink)}`,
 		"</g>",
 	].join("\n");
 }
 
-/** An affordance: the strokes of its button, mark or scribble, then its label, which a scribble does not have. */
-function drawAffordance(laid: LaidAffordance, theme: Theme): string {
+/** The strokes of an affordance's button, mark or scribble: none for copy. */
+function drawAffordance(laid: LaidAffordance, theme: Theme): string[] {
 	const em = theme.fontSize;
 	const path = affordanceStrokes(laid, em, wobble(theme, laid.affordance.key));
-	const { mark } = laid.affordance;
-	const labelColor =
-		mark === "field" || mark === "select" ? theme.muted : theme.ink;
+	if (!path) return [];
 	return [
-		'<g class="affordance">',
-		...(path
-			? [
-					`  <path d="${path}" fill="none" stroke="${theme.ink}" stroke-width="${num(AFFORDANCE_STROKE * em)}" stroke-linecap="round" stroke-linejoin="round"/>`,
-				]
-			: []),
-		...(laid.label ? [`  ${text(laid.label, labelColor)}`] : []),
-		"</g>",
-	].join("\n");
+		[
+			'<g class="affordance">',
+			`  <path d="${path}" fill="none" stroke="${theme.ink}" stroke-width="${num(AFFORDANCE_STROKE * em)}" stroke-linecap="round" stroke-linejoin="round"/>`,
+			"</g>",
+		].join("\n"),
+	];
+}
+
+/** A place's name, or an affordance's label, which a scribble does not have: that of a field or a select in `muted`. */
+function labelOf(item: LaidPlace | LaidAffordance, theme: Theme): string[] {
+	if (item.kind === "place") return [text(item.name, theme.ink)];
+	if (!item.label) return [];
+	const { mark } = item.affordance;
+	const muted = mark === "field" || mark === "select";
+	return [text(item.label, muted ? theme.muted : theme.ink)];
 }
 
 /** The strokes of an affordance, all drawn from its one Wobble generator: none for copy. */
@@ -201,20 +212,35 @@ function affordanceStrokes(
 	}
 }
 
-/** An arrow in the accent, over its halo in the background color, which a transparent background leaves out. */
-function drawArrow({ arrow: { key }, path }: LaidArrow, theme: Theme): string {
-	const em = theme.fontSize;
-	const d = arrow(path, em, wobble(theme, key));
-	const drawn = (color: string, width: number) =>
-		`  <path d="${d}" fill="none" stroke="${color}" stroke-width="${num(width * em)}" stroke-linecap="round" stroke-linejoin="round"/>`;
+/** The `d` of every arrow of `layout`, all variants, in data order, each shaken by its own generator. */
+function arrowStrokes(layout: Layout, theme: Theme): string[] {
+	return layout.variants.flatMap(({ arrows }) =>
+		arrows.map(({ arrow: { key }, path }) =>
+			arrow(path, theme.fontSize, wobble(theme, key)),
+		),
+	);
+}
+
+/** The halo under an arrow, in the background color. */
+function drawHalo(d: string, theme: Theme): string {
 	return [
-		'<g class="arrow">',
-		...(theme.background === "transparent"
-			? []
-			: [drawn(theme.background, HALO_STROKE)]),
-		drawn(theme.accent, ARROW_STROKE),
+		'<g class="halo">',
+		drawn(d, theme.background, HALO_STROKE * theme.fontSize),
 		"</g>",
 	].join("\n");
+}
+
+/** An arrow, in the accent. */
+function drawArrow(d: string, theme: Theme): string {
+	return [
+		'<g class="arrow">',
+		drawn(d, theme.accent, ARROW_STROKE * theme.fontSize),
+		"</g>",
+	].join("\n");
+}
+
+function drawn(d: string, color: string, width: number): string {
+	return `  <path d="${d}" fill="none" stroke="${color}" stroke-width="${num(width)}" stroke-linecap="round" stroke-linejoin="round"/>`;
 }
 
 /** The two strokes of a ▾ filling `box`. */

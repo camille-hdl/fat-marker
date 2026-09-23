@@ -40,15 +40,40 @@ function sketch(
 	};
 }
 
-/** The places and affordances drawn in `svg`, each with its text, its lines joined by spaces, and the `d` of all its paths. */
-function drawnGroups(svg: string): { text: string; d: string }[] {
-	return [
+/** The lines of a `<text>`, joined by spaces. */
+function linesOf(text: string): string {
+	return [...text.matchAll(/<tspan [^>]*>(.*?)<\/tspan>/g)]
+		.map(([, line]) => line)
+		.join(" ");
+}
+
+/** The `<text>` elements of the `<g class="text">` groups of `svg`, in drawing order: each variant's name, then its items'. */
+function texts(svg: string): string[] {
+	return (svg.match(/<g class="text">[\s\S]*?<\/g>/g) ?? []).flatMap(
+		(group) => group.match(/<text [\s\S]*?<\/text>/g) ?? [],
+	);
+}
+
+/**
+ * The places and affordances drawn in `svg`, in document order: each one's group of strokes, under the halos, the
+ * `d` of all its paths, its name or label, over the halos, and that text's lines joined by spaces. The n-th group
+ * goes with the n-th name or label after its variant's name, so `svg` must hold no copy and no scribble.
+ */
+function drawnGroups(
+	svg: string,
+): { strokes: string; d: string; label: string; text: string }[] {
+	const groups = [
 		...svg.matchAll(/<g class="(?:place|affordance)">([\s\S]*?)<\/g>/g),
-	].map(([, body]) => ({
-		text: [...body.matchAll(/<tspan [^>]*>(.*?)<\/tspan>/g)]
-			.map(([, text]) => text)
-			.join(" "),
+	];
+	const labels = (svg.match(/<g class="text">[\s\S]*?<\/g>/g) ?? []).flatMap(
+		(group) => texts(group).slice(1),
+	);
+	assert.equal(groups.length, labels.length, "copy or a scribble in the svg");
+	return groups.map(([strokes, body], i) => ({
+		strokes,
 		d: [...body.matchAll(/<path d="([^"]+)"/g)].map(([, d]) => d).join(" "),
+		label: labels[i],
+		text: linesOf(labels[i]),
 	}));
 }
 
@@ -105,6 +130,11 @@ function arrowGroups(svg: string): string[] {
 	const groups = svg.match(/<g class="arrow">[\s\S]*?<\/g>/g) ?? [];
 	assert.ok(groups.length > 0, "no arrow drawn");
 	return groups;
+}
+
+/** The `<g class="halo">` groups of `svg`, in drawing order. */
+function haloGroups(svg: string): string[] {
+	return svg.match(/<g class="halo">[\s\S]*?<\/g>/g) ?? [];
 }
 
 /** The `<g class="affordance">` groups of `svg`, in document order. */
@@ -412,9 +442,7 @@ describe("renderSvg", () => {
 			assert.equal(svg.split(text).length - 1, 1, text);
 			assert.ok(desc(svg)?.includes(text), text);
 		}
-		const scribbles = affordanceGroups(svg).filter(
-			(group) => !group.includes("<text"),
-		);
+		const scribbles = affordanceGroups(svg).slice(0, 2);
 		assert.deepEqual(
 			scribbles.map((group) => group.match(/M/g)?.length),
 			[4, 1],
@@ -446,11 +474,10 @@ describe("renderSvg", () => {
 				},
 			],
 		});
-		for (const group of affordanceGroups(svg)) {
-			const baselines = [...group.matchAll(/<tspan [^>]*y="([^"]+)"/g)].map(
+		for (const { label, text, d } of drawnGroups(svg).slice(1)) {
+			const baselines = [...label.matchAll(/<tspan [^>]*y="([^"]+)"/g)].map(
 				([, y]) => Number(y),
 			);
-			const [{ text, d }] = drawnGroups(group);
 			const ys = [...d.matchAll(/-?\d+\.\d,(-?\d+\.\d)/g)].map(([, y]) =>
 				Number(y),
 			);
@@ -477,8 +504,7 @@ describe("renderSvg", () => {
 				},
 			],
 		});
-		for (const group of affordanceGroups(svg)) {
-			const [{ text, d }] = drawnGroups(group);
+		for (const { text, d } of drawnGroups(svg).slice(1)) {
 			// The points the outline goes through, where each of its curves ends: the last one closes it.
 			const points = [
 				...d.matchAll(/\d (-?\d+\.\d),(-?\d+\.\d)(?= [CZ])/g),
@@ -521,8 +547,7 @@ describe("renderSvg", () => {
 				},
 			],
 		});
-		for (const group of affordanceGroups(svg)) {
-			const [{ text, d }] = drawnGroups(group);
+		for (const { text, d } of drawnGroups(svg).slice(1)) {
 			// Each stroke lies between the highest and the lowest of its points and control points.
 			const strokes = d
 				.split("M")
@@ -544,25 +569,29 @@ describe("renderSvg", () => {
 	});
 
 	test("draws copy as bare text in ink, on the left", () => {
-		const [plot] = affordanceGroups(renderSvg(fixture("copy-scribble")));
-		assert.doesNotMatch(plot, /<path/);
+		const svg = renderSvg(fixture("copy-scribble"));
+		// A frame for each place, the strokes of both scribbles and the button: none for the two copies.
+		assert.equal(affordanceGroups(svg).length, 3);
+		const [, , plot] = texts(svg);
 		assert.match(plot, /<text text-anchor="start" [^>]*fill="#262a33"><tspan /);
-		assert.equal(drawnGroups(plot)[0].text, "Plot 12, sunny, next to the shed");
+		assert.equal(linesOf(plot), "Plot 12, sunny, next to the shed");
 	});
 
 	test("draws the labels of a field and a select in muted, and every other label in ink", () => {
-		const groups = affordanceGroups(renderSvg(fixture("marks")));
-		const fills = groups.map(
-			(group) => group.match(/<text [^>]*fill="([^"]+)"/)?.[1],
+		const affordances = drawnGroups(renderSvg(fixture("marks"))).filter(
+			({ strokes }) => strokes.startsWith('<g class="affordance">'),
+		);
+		const fills = affordances.map(
+			({ label }) => label.match(/<text [^>]*fill="([^"]+)"/)?.[1],
 		);
 		assert.deepEqual(fills, [
 			"#6b6259",
 			"#6b6259",
 			...Array(9).fill("#262a33"),
 		]);
-		for (const group of groups) {
+		for (const { strokes } of affordances) {
 			assert.match(
-				group,
+				strokes,
 				/<path d="[^"]+" fill="none" stroke="#262a33" stroke-width="2\.5"/,
 			);
 		}
@@ -580,12 +609,18 @@ describe("renderSvg", () => {
 	});
 
 	test("draws nested places like top-level ones, and an empty place as its frame and name", () => {
-		const svg = renderSvg(fixture("empty-place"));
-		const places = svg.match(
-			/<g class="place">\n {2}<path d="[^"]+"[^>]*\/>\n {2}<text [^>]*font-weight="700"[^>]*>(?:<tspan [^>]*>[^<]*<\/tspan>)+<\/text>\n<\/g>/g,
+		const places = drawnGroups(renderSvg(fixture("empty-place"))).filter(
+			({ strokes }) => strokes.startsWith('<g class="place">'),
 		);
-		assert.equal(places?.length, 3);
-		assert.match(places?.[1] ?? "", />Confirmation</);
+		assert.equal(places.length, 3);
+		for (const { strokes, label } of places) {
+			assert.match(
+				strokes,
+				/^<g class="place">\n {2}<path d="[^"]+"[^>]*\/>\n<\/g>$/,
+			);
+			assert.match(label, /font-weight="700"/);
+		}
+		assert.equal(places[1].text, "Confirmation");
 	});
 
 	test("escapes markup in a variant name, a place name and an affordance text", () => {
@@ -606,13 +641,20 @@ describe("renderSvg", () => {
 		);
 	});
 
-	test("draws a place as a frame and its name, then an affordance as a box and its label, in document order", () => {
+	test("draws a place's frame, then an affordance's box, in document order, and later the variant name, the place name and the label", () => {
 		const svg = renderSvg(fixture("minimal"));
-		const variant = svg.match(/<g class="variant">[\s\S]*<\/g>\n<\/g>/)?.[0];
+		const variant = svg.match(/<g class="variant">[\s\S]*?<\/g>\n<\/g>/)?.[0];
 		assert.ok(variant, svg);
 		assert.match(
 			variant,
-			/^<g class="variant">\n<text [^>]*font-weight="700"[^>]*><tspan [^>]*>A · Plot list<\/tspan><\/text>\n<g class="place">\n {2}<path d="[^"]+" fill="none" stroke="#262a33" stroke-width="3\.6"[^>]*\/>\n {2}<text [^>]*font-weight="700"[^>]*><tspan [^>]*>Plot list<\/tspan><\/text>\n<\/g>\n<g class="affordance">\n {2}<path d="[^"]+Z" fill="none" stroke="#262a33" stroke-width="2\.5"[^>]*\/>\n {2}<text text-anchor="middle" [^>]*font-weight="600"[^>]*><tspan [^>]*>Book a plot<\/tspan><\/text>\n<\/g>\n<\/g>$/,
+			/^<g class="variant">\n<g class="place">\n {2}<path d="[^"]+" fill="none" stroke="#262a33" stroke-width="3\.6"[^>]*\/>\n<\/g>\n<g class="affordance">\n {2}<path d="[^"]+Z" fill="none" stroke="#262a33" stroke-width="2\.5"[^>]*\/>\n<\/g>\n<\/g>$/,
+		);
+		const text = svg.match(/<g class="text">[\s\S]*?<\/g>/)?.[0];
+		assert.ok(text, svg);
+		assert.ok(svg.indexOf(variant) < svg.indexOf(text));
+		assert.match(
+			text,
+			/^<g class="text">\n<text [^>]*font-weight="700"[^>]*><tspan [^>]*>A · Plot list<\/tspan><\/text>\n<text [^>]*font-weight="700"[^>]*><tspan [^>]*>Plot list<\/tspan><\/text>\n<text text-anchor="middle" [^>]*font-weight="600"[^>]*><tspan [^>]*>Book a plot<\/tspan><\/text>\n<\/g>$/,
 		);
 	});
 
@@ -627,10 +669,8 @@ describe("renderSvg", () => {
 			"Share this plot with a neighbour who waters it while you are away for the summer holidays.";
 		assert.equal(label.length, 90);
 		const svg = renderSvg(sketch("A", "Plot", label));
-		const text = svg.match(
-			/<g class="affordance">[\s\S]*?<text [^>]*>(.*)<\/text>/,
-		)?.[1];
-		assert.ok((text?.match(/<tspan /g)?.length ?? 0) >= 2, text);
+		const [{ label: drawn }] = drawnGroups(svg).slice(1);
+		assert.ok((drawn.match(/<tspan /g)?.length ?? 0) >= 2, drawn);
 	});
 
 	test("describes each variant's arrows after its places and affordances, in data order", () => {
@@ -686,34 +726,49 @@ describe("renderSvg", () => {
 		);
 	});
 
-	test("draws every arrow in front, after every variant's items, each over its halo in the background color", () => {
+	test("draws the halos over every frame and stroke, then every text, then every arrow in front, each over its halo in the background color", () => {
 		const svg = renderSvg(fixture("arrows"));
-		const arrows = arrowGroups(svg);
+		const [arrows, halos] = [arrowGroups(svg), haloGroups(svg)];
 		assert.equal(arrows.length, 10);
-		const lastItem = Math.max(
-			svg.lastIndexOf('<g class="place">'),
-			svg.lastIndexOf('<g class="affordance">'),
-		);
-		assert.ok(lastItem < svg.indexOf('<g class="arrow">'));
-		for (const group of arrows) {
+		assert.equal(halos.length, 10);
+		const [lastItem, firstHalo, lastHalo] = [
+			Math.max(
+				svg.lastIndexOf('<g class="place">'),
+				svg.lastIndexOf('<g class="affordance">'),
+			),
+			svg.indexOf('<g class="halo">'),
+			svg.lastIndexOf('<g class="halo">'),
+		];
+		const [firstText, lastText] = [
+			svg.indexOf('<g class="text">'),
+			svg.lastIndexOf("<text "),
+		];
+		assert.ok(lastItem < firstHalo);
+		assert.ok(lastHalo < firstText);
+		assert.ok(lastText < svg.indexOf('<g class="arrow">'));
+		const stroke = (group: string) => {
 			const strokes = [
 				...group.matchAll(
 					/<path d="([^"]+)" [^>]*stroke="(#[\da-f]+)" stroke-width="([\d.]+)"/g,
 				),
 			];
-			assert.equal(strokes.length, 2, group);
-			const [[, haloD, halo, haloWidth], [, arrowD, arrow, arrowWidth]] =
-				strokes;
-			assert.deepEqual([halo, arrow], ["#fff1e5", "#0f5499"]);
-			assert.equal(haloD, arrowD);
-			assert.ok(Number(haloWidth) > Number(arrowWidth));
-			assert.equal(arrowWidth, "2.9"); // 0.16 em
+			assert.equal(strokes.length, 1, group);
+			const [[, d, color, width]] = strokes;
+			return { d, color, width: Number(width) };
+		};
+		for (const [i, group] of arrows.entries()) {
+			const [halo, arrow] = [stroke(halos[i]), stroke(group)];
+			assert.deepEqual([halo.color, arrow.color], ["#fff1e5", "#0f5499"]);
+			assert.equal(halo.d, arrow.d);
+			assert.ok(halo.width > arrow.width);
+			assert.equal(arrow.width, 2.9); // 0.16 em
 		}
 	});
 
 	test("draws no halo on a transparent background", () => {
 		const svg = renderSvg(fixture("arrows"), { background: "transparent" });
 		assert.ok(!svg.includes("#fff1e5"));
+		assert.deepEqual(haloGroups(svg), []);
 		for (const group of arrowGroups(svg)) {
 			assert.equal(group.match(/<path /g)?.length, 1, group);
 			assert.ok(group.includes('stroke="#0f5499"'), group);
