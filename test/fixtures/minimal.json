@@ -1,0 +1,13 @@
+{
+	"variants": [
+		{
+			"variant": "A · Plot list",
+			"contains": [
+				{
+					"place": "Plot list",
+					"contains": [{ "affordance": "Book a plot" }]
+				}
+			]
+		}
+	]
+}
