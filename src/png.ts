@@ -2,17 +2,19 @@
 // adapted: FatMarkerError, Layout text blocks, the 16384-pixel side limit and word/SVG hint
 import { readFile } from "node:fs/promises";
 import { fontFiles, uncovered } from "./font.ts";
-import { codePoint, FatMarkerError, show, type Text } from "./input.ts";
+import { codePoint, FatMarkerError, show } from "./input.ts";
 import type { Box, Layout, TextBlock } from "./layout.ts";
 
 type Resvg = typeof import("@resvg/resvg-wasm").Resvg;
 
+/** PNG is drawn at this multiple of the SVG's size. */
 const ZOOM = 2;
+/** At 16384 px, resvg-wasm takes 7.4 s; at 24000 px, it crashes with RuntimeError: unreachable. */
 const SIDE_LIMIT = 16_384;
 
 let rasterizer: Promise<Resvg> | undefined;
 
-/** Loads and initializes resvg on first call. One promise serves concurrent calls. */
+/** Loads and initializes resvg on first call. One promise serves concurrent calls because initWasm throws on a second call. */
 function loadRasterizer(): Promise<Resvg> {
 	rasterizer ??= (async () => {
 		const { initWasm, Resvg } = await import("@resvg/resvg-wasm");
@@ -43,9 +45,11 @@ export async function toPng(svg: string, layout: Layout): Promise<Uint8Array> {
 		try {
 			return image.asPng();
 		} finally {
+			// Frees the WebAssembly memory now, rather than whenever the garbage collector runs the finalizers.
 			image.free();
 		}
 	} finally {
+		// Frees the WebAssembly memory now, rather than whenever the garbage collector runs the finalizers.
 		resvg.free();
 	}
 }
