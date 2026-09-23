@@ -21,6 +21,12 @@ const CORNER_WOBBLE = 0.1;
 const ROUND_WOBBLE = 0.08;
 /** Points on each corner's arc of a rounded rectangle: 16 in all, so that the corners are not pinched. */
 const ARC_POINTS = 4;
+/** The length of one wave of a wavy line. */
+const WAVE_LENGTH = 1.1;
+/** How far a wavy line strays from its axis, before shaking. */
+const WAVE_HEIGHT = 0.17;
+/** How far each point of a wavy line is shaken at most. */
+const WAVE_WOBBLE = 0.04;
 
 export type Random = () => number;
 
@@ -61,6 +67,34 @@ export function stroke(
 		return i === 0 || i === count - 1
 			? point
 			: shake(point, STROKE_WOBBLE * em, random);
+	});
+	return smooth(points);
+}
+
+/**
+ * A wavy line from `from` to `to`: a sine through a point every quarter wave, each point shaken, starting and ending
+ * on its axis.
+ */
+export function wavy(
+	[from, to]: [Point, Point],
+	em: number,
+	random: Random,
+): string {
+	const [dx, dy] = [to.x - from.x, to.y - from.y];
+	const length = Math.hypot(dx, dy) || 1;
+	const [nx, ny] = [-dy / length, dx / length];
+	const quarters = Math.max(
+		2,
+		2 * Math.round((2 * length) / (WAVE_LENGTH * em)),
+	);
+	const points = Array.from({ length: quarters + 1 }, (_, i) => {
+		const t = i / quarters;
+		const offset = WAVE_HEIGHT * em * Math.sin((i * Math.PI) / 2);
+		const point = {
+			x: from.x + t * dx + nx * offset,
+			y: from.y + t * dy + ny * offset,
+		};
+		return shake(point, WAVE_WOBBLE * em, random);
 	});
 	return smooth(points);
 }

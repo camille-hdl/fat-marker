@@ -45,6 +45,8 @@ const fixtures = [
 	"rows",
 	"long-text",
 	"empty-place",
+	"marks",
+	"copy-scribble",
 ];
 
 const sketches: Record<string, Sketch> = {
@@ -117,9 +119,20 @@ function generator(seed: number): () => number {
 /** Places and rows of the random sketches nest at most this deep. */
 const RANDOM_DEPTH = 4;
 
+const marks = [
+	"field",
+	"select",
+	"checkbox",
+	"radio",
+	"toggle",
+	"link",
+	"chevron",
+	"handle",
+] as const;
+
 /**
- * `count` random sketches, always the same: 1 to 4 variants of places and rows nested at most 4 deep, texts of 1 to 60
- * characters, with or without a title and a subtitle.
+ * `count` random sketches, always the same: 1 to 4 variants of places and rows nested at most 4 deep, buttons, marks,
+ * copy and scribbles, texts of 1 to 60 characters, with or without a title and a subtitle.
  */
 function randomSketches(count: number): Sketch[] {
 	const random = generator(20260923);
@@ -135,6 +148,13 @@ function randomSketches(count: number): Sketch[] {
 		let words = word(integer(1, 12));
 		while (words.length < length) words += ` ${word(integer(1, 12))}`;
 		return words.slice(0, length).trim();
+	};
+	const affordance = (): Content => {
+		const roll = random();
+		if (roll < 0.4) return { affordance: text() };
+		if (roll < 0.7) return { affordance: text(), mark: pick([...marks]) };
+		if (roll < 0.85) return { affordance: text(), read: true };
+		return { affordance: text(), read: true, scribble: integer(1, 20) };
 	};
 	const distinct = (size: number, taken = new Set<string>()) => {
 		const texts = new Set<string>();
@@ -152,7 +172,7 @@ function randomSketches(count: number): Sketch[] {
 			const content = (depth: number, inPlace: boolean): Content => {
 				const roll = random();
 				if (inPlace && (depth > RANDOM_DEPTH || roll < 0.45)) {
-					return { affordance: text() };
+					return affordance();
 				}
 				if (depth < RANDOM_DEPTH && roll > 0.8) {
 					return {
@@ -205,6 +225,12 @@ function inside(inner: Box, outer: Box, inset = 0): boolean {
 }
 
 const bottom = (box: Box) => box.y + box.height;
+const pointBox = ({ x, y }: { x: number; y: number }): Box => ({
+	x,
+	y,
+	width: 0,
+	height: 0,
+});
 const right = (box: Box) => box.x + box.width;
 const close = (a: number, b: number) => Math.abs(a - b) < EPSILON;
 
@@ -327,6 +353,10 @@ function localGeometry(variant: LaidVariant) {
 							x: item.label.x - dx,
 							box: shift(item.label.box),
 						},
+						glyph: item.glyph && shift(item.glyph),
+						scribble: item.scribble?.map((line) =>
+							line.map((point) => ({ ...point, x: point.x - dx })),
+						),
 					},
 		),
 	};
@@ -375,6 +405,15 @@ const invariants: [string, (sketch: Sketch, laid: Layout) => void][] = [
 						assert.ok(
 							inside(item.name.box, item.frame, GAP),
 							item.place.name.text,
+						);
+						continue;
+					}
+					const what = item.affordance.text.text;
+					if (item.glyph) assert.ok(inside(item.glyph, item.box), what);
+					for (const [from, to] of item.scribble ?? []) {
+						assert.ok(
+							inside(boundingBox([pointBox(from), pointBox(to)]), item.box),
+							what,
 						);
 					}
 				}
@@ -560,6 +599,36 @@ const invariants: [string, (sketch: Sketch, laid: Layout) => void][] = [
 		},
 	],
 	[
+		"draws a scribble as n lines of 12 em, one per line height, the last one shorter, and no label (invariant 6)",
+		(_, laid) => {
+			for (const variant of laid.variants) {
+				for (const item of variant.items) {
+					if (item.kind !== "affordance") continue;
+					const { scribble } = item.affordance;
+					if (scribble === undefined) {
+						assert.equal(item.scribble, undefined);
+						continue;
+					}
+					const what = item.affordance.text.text;
+					assert.equal(item.label, undefined, what);
+					assert.equal(item.scribble?.length, scribble, what);
+					const lines = item.scribble ?? [];
+					for (const [i, [from, to]] of lines.entries()) {
+						assert.equal(from.y, to.y, what);
+						const length = to.x - from.x;
+						if (i < lines.length - 1)
+							assert.ok(close(length, LABEL_WRAP), what);
+						else assert.ok(length > 0 && length < LABEL_WRAP - GAP, what);
+						if (i > 0) {
+							assert.ok(close(from.y - lines[i - 1][0].y, 1.25 * em), what);
+							assert.ok(close(from.x, lines[i - 1][0].x), what);
+						}
+					}
+				}
+			}
+		},
+	],
+	[
 		"lays each variant out whatever the others (invariant 7)",
 		(sketch, laid) => {
 			for (const [i, variant] of sketch.variants.entries()) {
@@ -656,6 +725,104 @@ describe("layout", () => {
 			[label.anchor, label.x, label.size, label.weight],
 			["middle", box.x + box.width / 2, em, 600],
 		);
+	});
+
+	/** The laid out affordances of the marks fixture, by mark, "button" for none. */
+	const marked = () =>
+		new Map(
+			laidOut(fixture("marks"))
+				.variants[0].items.filter((item) => item.kind === "affordance")
+				.map((item) => [item.affordance.mark ?? "button", item]),
+		);
+
+	test("gives a field and a select a box of about 8 em at least, their label on the left", () => {
+		const laid = laidOut({
+			variants: [
+				{
+					variant: "A",
+					contains: [
+						{
+							place: "P",
+							contains: [
+								{ affordance: "Go" },
+								{ affordance: "Go", mark: "field" },
+								{ affordance: "Go", mark: "select" },
+							],
+						},
+					],
+				},
+			],
+		});
+		const [, button, field, select] = laid.variants[0].items;
+		assert.ok(button.kind === "affordance");
+		for (const input of [field, select]) {
+			assert.ok(input.kind === "affordance" && input.label);
+			assert.ok(input.box.width >= 7 * em, String(input.box.width));
+			assert.ok(input.box.width > button.box.width);
+			assert.equal(input.box.height, button.box.height);
+			assert.equal(input.label.anchor, "start");
+			assert.ok(input.label.box.x > input.box.x);
+			assert.ok(input.label.box.x - input.box.x < em);
+		}
+	});
+
+	test("puts a select's ▾ inside its box, right of its label", () => {
+		const select = marked().get("select");
+		assert.ok(select?.label && select.glyph);
+		assert.ok(inside(select.glyph, select.box));
+		assert.ok(right(select.label.box) <= select.glyph.x);
+		assert.ok(right(select.box) - right(select.glyph) < em);
+	});
+
+	test("draws a glyph before the label of a checkbox, radio, toggle, chevron or handle", () => {
+		const laid = marked();
+		for (const mark of ["checkbox", "radio", "toggle", "chevron", "handle"]) {
+			const item = laid.get(mark);
+			assert.ok(item?.label && item.glyph, mark);
+			assert.equal(item.glyph.x, item.box.x, mark);
+			assert.ok(right(item.glyph) + GAP <= item.label.box.x, mark);
+			assert.equal(item.label.anchor, "start", mark);
+			assert.ok(item.glyph.height <= item.label.lineHeight, mark);
+		}
+		const [checkbox, radio, toggle] = ["checkbox", "radio", "toggle"].map(
+			(mark) => laid.get(mark)?.glyph,
+		);
+		assert.ok(checkbox && radio && toggle);
+		assert.equal(checkbox.width, checkbox.height);
+		assert.equal(radio.width, radio.height);
+		assert.ok(toggle.width > toggle.height);
+	});
+
+	test("keeps room for a link's wavy underline under its label", () => {
+		const link = marked().get("link");
+		assert.ok(link?.label && link.glyph);
+		assert.equal(link.label.anchor, "start");
+		assert.equal(link.glyph.x, link.label.box.x);
+		const lastBaseline =
+			link.label.baseline +
+			(link.label.lines.length - 1) * link.label.lineHeight;
+		assert.ok(link.glyph.y > lastBaseline);
+		assert.ok(link.glyph.width <= link.label.box.width);
+	});
+
+	test("draws copy as bare text on the left, wrapped at 12 em", () => {
+		const long =
+			"Share this plot with a neighbour who waters it while you are away for the summer holidays.";
+		const [, copy] = laidOut({
+			variants: [
+				{
+					variant: "A",
+					contains: [
+						{ place: "P", contains: [{ affordance: long, read: true }] },
+					],
+				},
+			],
+		}).variants[0].items;
+		assert.ok(copy.kind === "affordance" && copy.label);
+		assert.equal(copy.glyph, undefined);
+		assert.equal(copy.label.anchor, "start");
+		assert.deepEqual(copy.label.box, copy.box);
+		assert.ok(copy.label.lines.length >= 2);
 	});
 
 	test("wraps a 90-character label on several lines", () => {

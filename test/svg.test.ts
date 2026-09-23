@@ -95,7 +95,14 @@ const fixtures = [
 	"rows",
 	"long-text",
 	"empty-place",
+	"marks",
+	"copy-scribble",
 ];
+
+/** The `<g class="affordance">` groups of `svg`, in document order. */
+function affordanceGroups(svg: string): string[] {
+	return svg.match(/<g class="affordance">[\s\S]*?<\/g>/g) ?? [];
+}
 
 describe("renderSvg", () => {
 	describe("ADR 0003", () => {
@@ -349,6 +356,97 @@ describe("renderSvg", () => {
 				"- place: Receipt",
 			].join("\n"),
 		);
+	});
+
+	test("names each mark in parentheses, and nothing for a button", () => {
+		assert.equal(
+			desc(renderSvg(fixture("marks"))),
+			[
+				"A · Plot search",
+				"- place: Plot search",
+				"- affordance: Search plots (field)",
+				"- affordance: Plot size (select)",
+				"- affordance: Raised beds only (checkbox)",
+				"- affordance: Sunny side (radio)",
+				"- affordance: Show on the map (toggle)",
+				"- affordance: Garden rules (link)",
+				"- affordance: Plot details (chevron)",
+				"- affordance: Reorder favourites (handle)",
+				"- affordance: Book a plot",
+			].join("\n"),
+		);
+	});
+
+	test("names copy and a scribble, with the scribble's text, before the place they are in", () => {
+		assert.equal(
+			desc(renderSvg(fixture("copy-scribble"))),
+			[
+				"A · Plot page",
+				"- place: Plot page",
+				"- affordance: Plot 12, sunny, next to the shed (copy)",
+				"- affordance: Rules for plot holders (copy)",
+				"- affordance: The rules voted at the spring general meeting (scribble)",
+				"- place: Neighbours (in Plot page)",
+				"- affordance: Who grows what next door (scribble) (in Neighbours)",
+				"- affordance: Say hello (in Neighbours)",
+			].join("\n"),
+		);
+	});
+
+	test("draws a scribble as one wavy line per line and its text only in <desc>", () => {
+		const svg = renderSvg(fixture("copy-scribble"));
+		for (const text of [
+			"The rules voted at the spring general meeting",
+			"Who grows what next door",
+		]) {
+			assert.equal(svg.split(text).length - 1, 1, text);
+			assert.ok(desc(svg)?.includes(text), text);
+		}
+		const scribbles = affordanceGroups(svg).filter(
+			(group) => !group.includes("<text"),
+		);
+		assert.deepEqual(
+			scribbles.map((group) => group.match(/M/g)?.length),
+			[4, 1],
+		);
+		for (const group of scribbles) {
+			assert.match(group, /stroke="#262a33" stroke-width="2\.5"/);
+		}
+	});
+
+	test("draws copy as bare text in ink, on the left", () => {
+		const [plot] = affordanceGroups(renderSvg(fixture("copy-scribble")));
+		assert.doesNotMatch(plot, /<path/);
+		assert.match(plot, /<text text-anchor="start" [^>]*fill="#262a33"><tspan /);
+		assert.equal(drawnGroups(plot)[0].text, "Plot 12, sunny, next to theshed");
+	});
+
+	test("draws the labels of a field and a select in muted, and every other label in ink", () => {
+		const groups = affordanceGroups(renderSvg(fixture("marks")));
+		const fills = groups.map(
+			(group) => group.match(/<text [^>]*fill="([^"]+)"/)?.[1],
+		);
+		assert.deepEqual(fills, [
+			"#6b6259",
+			"#6b6259",
+			...Array(7).fill("#262a33"),
+		]);
+		for (const group of groups) {
+			assert.match(
+				group,
+				/<path d="[^"]+" fill="none" stroke="#262a33" stroke-width="2\.5"/,
+			);
+		}
+	});
+
+	test("draws a field sharp in four strokes, a select with two more for its ▾, and a button as one closed path", () => {
+		const groups = affordanceGroups(renderSvg(fixture("marks")));
+		const d = (group: string) => group.match(/<path d="([^"]+)"/)?.[1] ?? "";
+		const [field, select] = groups;
+		assert.equal(d(field).match(/M/g)?.length, 4);
+		assert.equal(d(select).match(/M/g)?.length, 6);
+		assert.equal(d(groups[8]).match(/M/g)?.length, 1);
+		assert.match(d(groups[8]), /Z$/);
 	});
 
 	test("draws nested places like top-level ones, and an empty place as its frame and name", () => {

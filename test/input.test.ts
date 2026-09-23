@@ -625,17 +625,162 @@ describe("readSketch, on the sketch and its variants", () => {
 		);
 	});
 
-	test("rejects unsupported affordance keys on their own fields", () => {
-		for (const key of ["read", "mark", "scribble", "to"]) {
-			assert.throws(
-				() => readSketch(withAffordance({ affordance: "Go", [key]: true })),
-				(error) =>
-					error instanceof FatMarkerError &&
-					error.field.endsWith(`.${key}`) &&
-					error.message.endsWith(": not supported yet"),
-			);
+	test("rejects to as not supported yet", () => {
+		assert.throws(
+			() => readSketch(withAffordance({ affordance: "Go", to: "P" })),
+			(error) =>
+				error instanceof FatMarkerError &&
+				error.message ===
+					"variants[0].contains[0].contains[0].to: not supported yet",
+		);
+	});
+});
+
+describe("readSketch, on copy, marks and scribbles", () => {
+	/** The model of the affordance `affordance`, alone in a place. */
+	const affordanceOf = (affordance: unknown) => {
+		const [place] = readSketch(withAffordance(affordance)).variants[0].contents;
+		assert.ok(place.kind === "place");
+		const [read] = place.contents;
+		assert.ok(read.kind === "affordance");
+		return read;
+	};
+
+	test("reads an absent read as false, and leaves absent mark and scribble out", () => {
+		const button = affordanceOf({ affordance: "Go" });
+		assert.equal(button.read, false);
+		assert.ok(!("mark" in button) && !("scribble" in button));
+	});
+
+	test("keeps read, mark and scribble", () => {
+		assert.equal(affordanceOf({ affordance: "Go", read: false }).read, false);
+		assert.equal(affordanceOf({ affordance: "Go", read: true }).read, true);
+		for (const mark of [
+			"field",
+			"select",
+			"checkbox",
+			"radio",
+			"toggle",
+			"link",
+			"chevron",
+			"handle",
+		]) {
+			assert.equal(affordanceOf({ affordance: "Go", mark }).mark, mark);
+		}
+		for (const scribble of [1, 20]) {
+			const copy = affordanceOf({ affordance: "Go", read: true, scribble });
+			assert.deepEqual([copy.read, copy.scribble], [true, scribble]);
 		}
 	});
+
+	test("normalizes a scribble's text like any text", () => {
+		const scribble = affordanceOf({
+			affordance: " Rules\n for  plot holders ",
+			read: true,
+			scribble: 3,
+		});
+		assert.equal(scribble.text.text, "Rules for plot holders");
+		assert.throws(
+			() =>
+				readSketch(
+					withAffordance({
+						affordance: "Rules\u0007",
+						read: true,
+						scribble: 3,
+					}),
+				),
+			(error) =>
+				error instanceof FatMarkerError &&
+				error.message ===
+					"variants[0].contains[0].contains[0].affordance: contains control character U+0007",
+		);
+	});
+
+	const field = "variants[0].contains[0].contains[0]";
+	const invalid: [string, unknown, string][] = [
+		[
+			"a read that is not a boolean",
+			{ affordance: "Go", read: "yes" },
+			`${field}.read: expected true or false, got "yes"`,
+		],
+		[
+			"an unknown mark",
+			{ affordance: "Go", mark: "button" },
+			`${field}.mark: unknown mark "button"; use "field", "select", "checkbox", "radio", "toggle", "link", "chevron" or "handle", or omit it for a button`,
+		],
+		[
+			"a mark that is not a string",
+			{ affordance: "Go", mark: 1 },
+			`${field}.mark: unknown mark 1; use "field", "select", "checkbox", "radio", "toggle", "link", "chevron" or "handle", or omit it for a button`,
+		],
+		[
+			"a scribble of 0 lines",
+			{ affordance: "Go", read: true, scribble: 0 },
+			`${field}.scribble: must be an integer from 1 to 20, got 0`,
+		],
+		[
+			"a scribble of 21 lines",
+			{ affordance: "Go", read: true, scribble: 21 },
+			`${field}.scribble: must be an integer from 1 to 20, got 21`,
+		],
+		[
+			"a scribble of 1.5 lines",
+			{ affordance: "Go", read: true, scribble: 1.5 },
+			`${field}.scribble: must be an integer from 1 to 20, got 1.5`,
+		],
+		[
+			"a scribble that is not a number",
+			{ affordance: "Go", read: true, scribble: "2" },
+			`${field}.scribble: must be an integer from 1 to 20, got "2"`,
+		],
+		[
+			"copy with a mark",
+			{ affordance: "Go", read: true, mark: "link" },
+			`${field}.mark: copy (read: true) has no mark`,
+		],
+		[
+			"a scribble without read",
+			{ affordance: "Go", scribble: 2 },
+			`${field}.scribble: only copy (read: true) can be a scribble`,
+		],
+		[
+			"a scribble on an affordance to act on",
+			{ affordance: "Go", read: false, scribble: 2 },
+			`${field}.scribble: only copy (read: true) can be a scribble`,
+		],
+		[
+			"a marked scribble, citing the mark first",
+			{ affordance: "Go", scribble: 2, mark: "link", read: true },
+			`${field}.mark: copy (read: true) has no mark`,
+		],
+		[
+			"a scribble with a mark and no read, citing the scribble",
+			{ affordance: "Go", scribble: 2, mark: "link" },
+			`${field}.scribble: only copy (read: true) can be a scribble`,
+		],
+		[
+			"a combination only after the keys of the affordance",
+			{ read: true, mark: "link", scribble: 0, affordance: "Go" },
+			`${field}.scribble: must be an integer from 1 to 20, got 0`,
+		],
+		[
+			"an unknown mark with an unsafe character, escaped",
+			{ affordance: "Go", mark: "link\u202e" },
+			`${field}.mark: unknown mark "link\\u202e"; use "field", "select", "checkbox", "radio", "toggle", "link", "chevron" or "handle", or omit it for a button`,
+		],
+	];
+
+	for (const [name, affordance, message] of invalid) {
+		test(`rejects ${name}`, () => {
+			assert.throws(
+				() => readSketch(withAffordance(affordance)),
+				(error) =>
+					error instanceof FatMarkerError &&
+					error.message === message &&
+					error.field === message.slice(0, message.indexOf(": ")),
+			);
+		});
+	}
 });
 
 describe("readTheme", () => {

@@ -1,16 +1,19 @@
 // from @camille-hdl/hill-chart@0.2.0, 738a559
-// functions FatMarkerError (renamed from HillChartError), readText (without its length bound), presentEntries, isObject, keyPath, codePoint, show and escapeUnsafeToPrint; readTheme (adapted: theme keys), readNumber, readSeed and readColor; the rest is new
+// functions FatMarkerError (renamed from HillChartError), readText (without its length bound), presentEntries, isObject, keyPath, codePoint, show and escapeUnsafeToPrint; readTheme (adapted: theme keys), readNumber, readSeed as readInteger (+ bounds) and readColor; the rest is new
 import { readFileSync } from "node:fs";
 
-export type Mark =
-	| "field"
-	| "select"
-	| "checkbox"
-	| "radio"
-	| "toggle"
-	| "link"
-	| "chevron"
-	| "handle";
+const MARKS = [
+	"field",
+	"select",
+	"checkbox",
+	"radio",
+	"toggle",
+	"link",
+	"chevron",
+	"handle",
+] as const;
+
+export type Mark = (typeof MARKS)[number];
 export type Affordance = {
 	affordance: string;
 	read?: boolean;
@@ -57,7 +60,7 @@ const THEME_READERS: Record<
 		theme.fontSize = readNumber(value, field, 6, 96);
 	},
 	seed: (theme, value, field) => {
-		theme.seed = readSeed(value, field);
+		theme.seed = readInteger(value, field, 0, 2 ** 32 - 1);
 	},
 };
 
@@ -116,6 +119,9 @@ const UNSAFE_TO_PRINT = /[\p{Cc}\p{Cf}\p{Cs}\u2028\u2029]/u;
 
 /** How deep places and rows nest: a place or a row at the top of a variant is at depth 1. */
 const MAX_DEPTH = 20;
+
+/** The most lines a scribble draws: a scribble stays a gesture, not a page. */
+const MAX_SCRIBBLE = 20;
 
 const DEFAULT_THEME: Theme = JSON.parse(
 	readFileSync(new URL("../default-theme.json", import.meta.url), "utf8"),
@@ -433,15 +439,19 @@ function readAffordance(
 	field: string,
 ): ModelAffordance {
 	let text: Text | undefined;
+	let read = false;
+	let mark: Mark | undefined;
+	let scribble: number | undefined;
 	for (const [key, value] of presentEntries(affordance)) {
 		if (key === "affordance") {
 			text = readNormalized(value, `${field}.affordance`);
-		} else if (
-			key === "read" ||
-			key === "mark" ||
-			key === "scribble" ||
-			key === "to"
-		) {
+		} else if (key === "read") {
+			read = readBoolean(value, `${field}.read`);
+		} else if (key === "mark") {
+			mark = readMark(value, `${field}.mark`);
+		} else if (key === "scribble") {
+			scribble = readInteger(value, `${field}.scribble`, 1, MAX_SCRIBBLE);
+		} else if (key === "to") {
 			throw new FatMarkerError(`${field}.${key}`, "not supported yet");
 		} else {
 			throw new FatMarkerError(
@@ -453,7 +463,45 @@ function readAffordance(
 	if (text === undefined) {
 		throw new FatMarkerError(`${field}.affordance`, "required");
 	}
-	return { kind: "affordance", text, key: "", read: false };
+	if (read && mark !== undefined) {
+		throw new FatMarkerError(`${field}.mark`, "copy (read: true) has no mark");
+	}
+	if (!read && scribble !== undefined) {
+		throw new FatMarkerError(
+			`${field}.scribble`,
+			"only copy (read: true) can be a scribble",
+		);
+	}
+	return {
+		kind: "affordance",
+		text,
+		key: "",
+		read,
+		...(mark && { mark }),
+		...(scribble && { scribble }),
+	};
+}
+
+function readBoolean(value: unknown, field: string): boolean {
+	if (typeof value !== "boolean") {
+		throw new FatMarkerError(
+			field,
+			`expected true or false, got ${show(value)}`,
+		);
+	}
+	return value;
+}
+
+function readMark(value: unknown, field: string): Mark {
+	const mark = MARKS.find((known) => known === value);
+	if (mark === undefined) {
+		const marks = MARKS.map(show);
+		throw new FatMarkerError(
+			field,
+			`unknown mark ${show(value)}; use ${marks.slice(0, -1).join(", ")} or ${marks.at(-1)}, or omit it for a button`,
+		);
+	}
+	return mark;
 }
 
 /**
@@ -543,17 +591,21 @@ function readNumber(
 	return value;
 }
 
-function readSeed(value: unknown, field: string): number {
-	const max = 2 ** 32 - 1;
+function readInteger(
+	value: unknown,
+	field: string,
+	min: number,
+	max: number,
+): number {
 	if (
 		typeof value !== "number" ||
 		!Number.isInteger(value) ||
-		value < 0 ||
+		value < min ||
 		value > max
 	) {
 		throw new FatMarkerError(
 			field,
-			`must be an integer from 0 to ${max}, got ${show(value)}`,
+			`must be an integer from ${min} to ${max}, got ${show(value)}`,
 		);
 	}
 	return value;

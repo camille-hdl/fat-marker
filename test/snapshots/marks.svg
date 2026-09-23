@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-18.0 -64.0 277.0 537.0" width="277.0" height="537.0" role="img">
+<title>Fat marker sketch</title>
+<desc>A · Plot search
+- place: Plot search
+- affordance: Search plots (field)
+- affordance: Plot size (select)
+- affordance: Raised beds only (checkbox)
+- affordance: Sunny side (radio)
+- affordance: Show on the map (toggle)
+- affordance: Garden rules (link)
+- affordance: Plot details (chevron)
+- affordance: Reorder favourites (handle)
+- affordance: Book a plot</desc>
+<rect x="-18.0" y="-64.0" width="277.0" height="537.0" fill="#fff1e5"/>
+<g class="variant">
+<text text-anchor="start" font-family="'Atkinson Hyperlegible Next', Avenir, 'Segoe UI', Seravek, Ubuntu, Calibri, 'DejaVu Sans', sans-serif" font-size="25.2" font-weight="700" fill="#262a33"><tspan x="0.0" y="-21.3">A · Plot search</tspan></text>
+<g class="place">
+  <path d="M-1.5,-1.0 C9.1,-1.1 41.6,-1.4 62.2,-1.7 C82.9,-2.0 102.3,-2.8 122.6,-2.8 C142.9,-2.9 163.3,-2.4 183.8,-2.0 C204.4,-1.6 235.4,-0.7 245.7,-0.5 M242.1,-1.1 C242.3,14.0 243.3,59.1 243.4,89.5 C243.5,119.8 242.9,150.5 242.7,181.2 C242.5,211.9 242.6,243.1 242.2,273.6 C241.7,304.1 240.4,334.0 240.0,364.4 C239.5,394.8 239.5,440.7 239.4,455.9 M240.3,454.7 C230.1,454.6 199.4,454.2 179.4,454.2 C159.3,454.3 140.7,455.1 120.1,455.1 C99.5,455.1 76.2,454.0 55.6,454.0 C35.1,454.0 6.6,455.0 -3.2,455.2 M0.2,459.6 C0.0,443.8 -1.1,396.1 -0.9,365.0 C-0.8,333.8 0.9,303.1 1.3,273.0 C1.8,242.8 1.7,214.9 1.5,184.1 C1.3,153.3 0.4,119.4 0.0,88.2 C-0.3,57.0 -0.5,12.1 -0.6,-3.1" fill="none" stroke="#262a33" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round"/>
+  <text text-anchor="start" font-family="'Atkinson Hyperlegible Next', Avenir, 'Segoe UI', Seravek, Ubuntu, Calibri, 'DejaVu Sans', sans-serif" font-size="19.8" font-weight="700" fill="#262a33"><tspan x="16.2" y="35.5">Plot search</tspan></text>
+</g>
+<g class="affordance">
+  <path d="M11.4,51.1 C19.5,51.5 43.9,53.4 60.5,53.5 C77.1,53.6 94.0,52.1 110.7,51.8 C127.5,51.6 152.8,52.0 161.2,52.0 M160.9,49.7 C160.8,53.0 160.5,63.3 160.6,69.7 C160.6,76.1 161.1,84.9 161.3,88.0 M163.5,85.1 C155.1,85.3 129.4,86.3 112.9,86.2 C96.4,86.2 80.3,84.6 64.4,84.7 C48.6,84.8 25.4,86.5 17.5,86.9 M18.0,89.4 C17.7,85.9 17.0,75.3 16.6,68.1 C16.1,61.0 15.3,50.3 15.1,46.7" fill="none" stroke="#262a33" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <text text-anchor="start" font-family="'Atkinson Hyperlegible Next', Avenir, 'Segoe UI', Seravek, Ubuntu, Calibri, 'DejaVu Sans', sans-serif" font-size="18.0" font-weight="600" fill="#6b6259"><tspan x="27.0" y="75.6">Search plots</tspan></text>
+</g>
+<g class="affordance">
+  <path d="M14.8,104.5 C23.1,104.3 48.6,103.3 64.7,103.1 C80.9,102.9 95.3,103.2 111.6,103.4 C128.0,103.7 154.4,104.5 162.9,104.7 M161.0,104.3 C160.9,107.6 160.4,118.0 160.5,124.2 C160.6,130.4 161.2,138.7 161.4,141.6 M163.3,140.3 C154.9,140.5 129.4,141.7 113.0,141.5 C96.6,141.3 81.6,139.4 65.1,139.2 C48.6,138.9 22.3,139.8 13.8,140.0 M17.8,141.4 C17.7,137.8 17.4,126.4 17.2,119.8 C17.0,113.2 16.8,104.6 16.7,101.6 M138.0,118.5 C138.5,119.2 140.1,121.4 141.2,122.7 C142.3,123.9 143.9,125.5 144.5,126.1 M143.0,126.7 C143.6,126.1 145.2,124.5 146.4,123.2 C147.5,121.9 149.2,119.5 149.8,118.8" fill="none" stroke="#262a33" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <text text-anchor="start" font-family="'Atkinson Hyperlegible Next', Avenir, 'Segoe UI', Seravek, Ubuntu, Calibri, 'DejaVu Sans', sans-serif" font-size="18.0" font-weight="600" fill="#6b6259"><tspan x="27.0" y="128.7">Plot size</tspan></text>
+</g>
+<g class="affordance">
+  <path d="M15.0,162.2 C16.6,162.1 21.4,161.8 24.2,161.7 C27.1,161.6 30.8,161.4 32.1,161.4 M30.5,161.4 C30.6,162.7 31.4,166.5 31.5,169.2 C31.6,171.9 31.3,176.1 31.2,177.4 M31.2,176.2 C29.8,176.1 25.5,175.8 23.0,175.8 C20.5,175.8 17.2,176.3 16.0,176.4 M16.4,177.8 C16.3,176.3 16.1,171.7 16.1,168.9 C16.0,166.1 16.2,162.2 16.2,160.8" fill="none" stroke="#262a33" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <text text-anchor="start" font-family="'Atkinson Hyperlegible Next', Avenir, 'Segoe UI', Seravek, Ubuntu, Calibri, 'DejaVu Sans', sans-serif" font-size="18.0" font-weight="600" fill="#262a33"><tspan x="37.8" y="175.5">Raised beds only</tspan></text>
+</g>
+<g class="affordance">
+  <path d="M30.5,209.7 C30.4,210.9 30.0,212.1 29.4,213.1 C28.8,214.2 27.9,215.1 26.9,215.8 C25.9,216.4 24.6,216.9 23.4,217.0 C22.2,217.1 20.7,216.8 19.6,216.2 C18.6,215.6 17.5,214.5 17.0,213.4 C16.4,212.3 16.2,210.9 16.3,209.7 C16.4,208.5 16.8,207.3 17.4,206.3 C18.0,205.2 18.9,204.3 19.9,203.6 C20.9,203.0 22.2,202.5 23.4,202.4 C24.6,202.3 26.1,202.6 27.2,203.2 C28.2,203.8 29.3,204.9 29.8,206.0 C30.4,207.1 30.6,208.5 30.5,209.7 Z" fill="none" stroke="#262a33" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <text text-anchor="start" font-family="'Atkinson Hyperlegible Next', Avenir, 'Segoe UI', Seravek, Ubuntu, Calibri, 'DejaVu Sans', sans-serif" font-size="18.0" font-weight="600" fill="#262a33"><tspan x="37.8" y="216.0">Sunny side</tspan></text>
+</g>
+<g class="affordance">
+  <path d="M16.0,250.6 C16.5,250.3 16.2,247.1 16.9,245.7 C17.7,244.4 19.1,243.3 20.3,242.6 C21.5,242.0 22.4,241.8 24.1,241.6 C27.0,241.3 33.4,241.9 36.5,242.4 C38.4,242.7 39.7,242.9 41.0,243.6 C42.2,244.2 43.6,245.1 44.2,246.2 C44.8,247.3 44.2,250.2 44.6,250.4 C44.8,250.5 45.4,249.7 45.5,249.7 C45.8,250.0 44.7,253.4 43.9,254.6 C43.1,255.6 42.1,256.2 41.0,256.7 C39.7,257.4 38.3,257.7 36.4,258.0 C33.3,258.6 27.2,259.3 24.3,258.8 C22.5,258.5 21.5,257.7 20.2,257.0 C19.1,256.3 17.8,255.8 17.0,254.7 C16.2,253.7 15.5,251.0 15.7,250.6 C15.7,250.6 15.9,250.7 16.0,250.6 Z" fill="none" stroke="#262a33" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <text text-anchor="start" font-family="'Atkinson Hyperlegible Next', Avenir, 'Segoe UI', Seravek, Ubuntu, Calibri, 'DejaVu Sans', sans-serif" font-size="18.0" font-weight="600" fill="#262a33"><tspan x="52.2" y="256.5">Show on the map</tspan></text>
+</g>
+<g class="affordance">
+  <path d="M16.1,302.0 C17.0,302.5 19.8,305.1 21.5,305.2 C23.2,305.2 24.9,303.6 26.4,302.4 C27.9,301.3 28.9,298.4 30.5,298.3 C32.2,298.2 34.6,300.7 36.2,301.8 C37.9,302.8 38.6,304.4 40.2,304.5 C41.7,304.6 43.9,303.5 45.7,302.5 C47.4,301.6 49.1,299.0 50.5,298.9 C52.0,298.9 52.9,301.1 54.4,302.1 C55.9,303.2 57.9,305.0 59.5,305.1 C61.1,305.1 62.5,303.5 64.1,302.6 C65.7,301.6 67.4,299.4 69.2,299.4 C70.9,299.3 73.0,301.6 74.7,302.4 C76.3,303.3 77.6,304.5 79.2,304.4 C80.7,304.4 82.2,303.3 83.8,302.4 C85.5,301.5 87.6,299.0 89.2,299.0 C90.7,299.0 91.7,301.4 93.3,302.4 C95.0,303.4 97.4,305.0 99.0,304.9 C100.6,304.9 101.5,302.9 103.1,302.0 C104.8,301.0 107.2,299.1 108.8,299.1 C110.4,299.1 111.4,300.8 112.9,301.8 C114.4,302.7 116.0,304.8 117.7,305.0 C119.4,305.1 122.2,302.9 123.1,302.5" fill="none" stroke="#262a33" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <text text-anchor="start" font-family="'Atkinson Hyperlegible Next', Avenir, 'Segoe UI', Seravek, Ubuntu, Calibri, 'DejaVu Sans', sans-serif" font-size="18.0" font-weight="600" fill="#262a33"><tspan x="16.2" y="297.0">Garden rules</tspan></text>
+</g>
+<g class="affordance">
+  <path d="M15.0,327.5 C15.5,327.9 16.9,329.0 18.3,330.1 C19.6,331.3 22.2,333.6 23.0,334.3 M23.3,333.2 C22.6,333.9 20.6,336.0 19.4,337.0 C18.2,338.1 16.5,339.2 15.9,339.6" fill="none" stroke="#262a33" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <text text-anchor="start" font-family="'Atkinson Hyperlegible Next', Avenir, 'Segoe UI', Seravek, Ubuntu, Calibri, 'DejaVu Sans', sans-serif" font-size="18.0" font-weight="600" fill="#262a33"><tspan x="29.7" y="340.2">Plot details</tspan></text>
+</g>
+<g class="affordance">
+  <path d="M14.5,369.9 C15.8,370.0 19.8,370.7 22.0,370.7 C24.3,370.7 27.2,370.0 28.2,369.9 M15.2,374.4 C16.3,374.3 19.9,373.6 22.0,373.6 C24.1,373.6 26.7,374.3 27.7,374.4 M14.7,378.9 C15.6,378.9 18.4,379.2 20.5,379.2 C22.7,379.2 26.3,378.9 27.4,378.9" fill="none" stroke="#262a33" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <text text-anchor="start" font-family="'Atkinson Hyperlegible Next', Avenir, 'Segoe UI', Seravek, Ubuntu, Calibri, 'DejaVu Sans', sans-serif" font-size="18.0" font-weight="600" fill="#262a33"><tspan x="34.2" y="380.7">Reorder favourites</tspan></text>
+</g>
+<g class="affordance">
+  <path d="M16.1,414.5 C16.6,412.1 17.8,410.4 18.5,408.6 C19.2,407.2 19.3,405.6 20.4,404.7 C21.9,403.4 23.7,403.3 27.5,402.8 C42.4,401.0 124.9,403.3 140.0,404.2 C143.9,404.4 145.4,404.0 147.2,405.0 C148.8,405.8 149.9,407.3 150.7,408.9 C151.6,410.7 151.5,413.0 151.9,415.6 C152.3,418.9 153.5,423.6 152.9,427.0 C152.5,429.7 150.9,432.5 149.7,434.3 C148.8,435.6 147.9,436.6 146.7,437.1 C145.3,437.7 144.5,437.2 141.8,437.3 C128.6,437.8 36.0,444.3 25.7,439.8 C23.7,439.0 24.0,437.6 22.9,436.7 C21.6,435.6 19.6,435.2 18.4,434.0 C17.1,432.6 15.9,431.1 15.3,428.8 C14.5,425.4 15.2,418.2 16.1,414.5 Z" fill="none" stroke="#262a33" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <text text-anchor="middle" font-family="'Atkinson Hyperlegible Next', Avenir, 'Segoe UI', Seravek, Ubuntu, Calibri, 'DejaVu Sans', sans-serif" font-size="18.0" font-weight="600" fill="#262a33"><tspan x="83.9" y="427.5">Book a plot</tspan></text>
+</g>
+</g>
+</svg>

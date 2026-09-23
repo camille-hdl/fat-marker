@@ -1,0 +1,23 @@
+{
+	"variants": [
+		{
+			"variant": "A · Plot search",
+			"contains": [
+				{
+					"place": "Plot search",
+					"contains": [
+						{ "affordance": "Search plots", "mark": "field" },
+						{ "affordance": "Plot size", "mark": "select" },
+						{ "affordance": "Raised beds only", "mark": "checkbox" },
+						{ "affordance": "Sunny side", "mark": "radio" },
+						{ "affordance": "Show on the map", "mark": "toggle" },
+						{ "affordance": "Garden rules", "mark": "link" },
+						{ "affordance": "Plot details", "mark": "chevron" },
+						{ "affordance": "Reorder favourites", "mark": "handle" },
+						{ "affordance": "Book a plot" }
+					]
+				}
+			]
+		}
+	]
+}

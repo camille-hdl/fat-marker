@@ -1,0 +1,32 @@
+{
+	"variants": [
+		{
+			"variant": "A · Plot page",
+			"contains": [
+				{
+					"place": "Plot page",
+					"contains": [
+						{ "affordance": "Plot 12, sunny, next to the shed", "read": true },
+						{ "affordance": "Rules for plot holders", "read": true },
+						{
+							"affordance": "The rules voted at the spring general meeting",
+							"read": true,
+							"scribble": 4
+						},
+						{
+							"place": "Neighbours",
+							"contains": [
+								{
+									"affordance": "Who grows what next door",
+									"read": true,
+									"scribble": 1
+								},
+								{ "affordance": "Say hello" }
+							]
+						}
+					]
+				}
+			]
+		}
+	]
+}

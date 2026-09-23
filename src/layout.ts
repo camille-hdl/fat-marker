@@ -2,6 +2,7 @@
 // functions textBlock (+ anchor "middle", + field), boundingBox, grow, roundOutward, smallest and largest; placeHeading as sketchText (+ wrapping). The rest is new.
 import { measure, type Weight, wrap } from "./font.ts";
 import type {
+	Mark,
 	Model,
 	ModelAffordance,
 	ModelArrow,
@@ -39,7 +40,7 @@ export type LaidAffordance = {
 	affordance: ModelAffordance;
 	box: Box; // extent; also the outline of a button, field or select
 	label?: TextBlock; // absent for a scribble
-	glyph?: Box; // square, circle, pill, chevron, handle, or a select's ▾
+	glyph?: Box; // square, circle, pill, chevron, handle, a select's ▾, or the band of a link's underline
 	scribble?: [Point, Point][]; // one line per rank, before waving
 };
 export type LaidArrow = {
@@ -91,6 +92,28 @@ const PLACE_PADDING = 0.9;
 const NAME_GAP = 0.6;
 const BUTTON_PADDING_X = 0.6;
 const BUTTON_PADDING_Y = 0.35;
+/** The narrowest a field or a select is, so that it reads as a field and not as a sharp button. */
+const FIELD_MIN_WIDTH = 8;
+/** A select's ▾, at the right inside its box. */
+const DROPDOWN_WIDTH = 0.6;
+const DROPDOWN_HEIGHT = 0.35;
+/** Between a glyph and the label it goes with. */
+const GLYPH_GAP = 0.4;
+/** The glyph drawn before the label of these marks, as [width, height]. */
+const GLYPHS: Record<
+	Exclude<Mark, "field" | "select" | "link">,
+	[number, number]
+> = {
+	checkbox: [0.8, 0.8],
+	radio: [0.8, 0.8],
+	toggle: [1.6, 0.9],
+	chevron: [0.35, 0.6],
+	handle: [0.6, 0.5],
+};
+/** The band a link's wavy underline runs in, centered on the bottom of its label. */
+const UNDERLINE_HEIGHT = 0.3;
+/** The last line of a scribble, as a share of the others. */
+const SCRIBBLE_LAST_LINE = 0.6;
 const MARGIN = 1;
 
 /**
@@ -233,7 +256,7 @@ function moveVariant(variant: LaidVariant, x: number): LaidVariant {
 function measureContent(content: ModelContent, em: number): Measured {
 	if (content.kind === "place") return measurePlace(content, em);
 	if (content.kind === "row") return measureRow(content, em);
-	const laid = measureButton(content, em);
+	const laid = measureAffordance(content, em);
 	return {
 		kind: "affordance",
 		laid,
@@ -376,21 +399,46 @@ function placePlace(
 	);
 }
 
-/** A button: its label wrapped at 12 em and centered, in a box that fits it with padding. */
+/** An affordance at its natural size, drawn as its mark, as copy or as a scribble asks. */
+function measureAffordance(
+	affordance: ModelAffordance,
+	em: number,
+): LaidAffordance {
+	if (affordance.scribble !== undefined) {
+		return measureScribble(affordance, affordance.scribble, em);
+	}
+	if (affordance.read) return measureCopy(affordance, em);
+	switch (affordance.mark) {
+		case undefined:
+			return measureButton(affordance, em);
+		case "field":
+			return measureField(affordance, em);
+		case "select":
+			return measureSelect(affordance, em);
+		case "link":
+			return measureLink(affordance, em);
+		default:
+			return measureGlyphMark(affordance, GLYPHS[affordance.mark], em);
+	}
+}
+
+/** An affordance's label: 1 em at weight 600, wrapped at 12 em, its box's top left at (0, 0). */
+function labelOf(
+	affordance: ModelAffordance,
+	em: number,
+	anchor: TextBlock["anchor"],
+): TextBlock {
+	const lines = wrap(affordance.text.text, LABEL_WRAP * em, 600, em);
+	const label = textBlock(lines, 600, em, anchor, 0, 0, affordance.text.field);
+	return move(label, 0, 0);
+}
+
+/** A button: its label centered, in a box that fits it with padding. */
 function measureButton(
 	affordance: ModelAffordance,
 	em: number,
 ): LaidAffordance {
-	const lines = wrap(affordance.text.text, LABEL_WRAP * em, 600, em);
-	const label = textBlock(
-		lines,
-		600,
-		em,
-		"middle",
-		0,
-		0,
-		affordance.text.field,
-	);
+	const label = labelOf(affordance, em, "middle");
 	const box = {
 		x: label.box.x - BUTTON_PADDING_X * em,
 		y: label.box.y - BUTTON_PADDING_Y * em,
@@ -400,6 +448,120 @@ function measureButton(
 	return { kind: "affordance", affordance, box, label };
 }
 
+/**
+ * A field: the box of a button, at least FIELD_MIN_WIDTH wide, its label on the left, and `room` kept right of the
+ * label.
+ */
+function measureField(
+	affordance: ModelAffordance,
+	em: number,
+	room = 0,
+): LaidAffordance {
+	const [paddingX, paddingY] = [BUTTON_PADDING_X * em, BUTTON_PADDING_Y * em];
+	const label = move(labelOf(affordance, em, "start"), paddingX, paddingY);
+	const box = {
+		x: 0,
+		y: 0,
+		width: Math.max(
+			label.box.width + room + 2 * paddingX,
+			FIELD_MIN_WIDTH * em,
+		),
+		height: label.box.height + 2 * paddingY,
+	};
+	return { kind: "affordance", affordance, box, label };
+}
+
+/** A select: a field with its ▾ at the right inside the box. */
+function measureSelect(
+	affordance: ModelAffordance,
+	em: number,
+): LaidAffordance {
+	const [width, height] = [DROPDOWN_WIDTH * em, DROPDOWN_HEIGHT * em];
+	const field = measureField(affordance, em, GLYPH_GAP * em + width);
+	const { box } = field;
+	const glyph = {
+		x: box.x + box.width - BUTTON_PADDING_X * em - width,
+		y: box.y + (box.height - height) / 2,
+		width,
+		height,
+	};
+	return { ...field, glyph };
+}
+
+/** A mark drawn as a glyph, `width` × `height` em, then a gap, then the label, with no box: the glyph faces the first line. */
+function measureGlyphMark(
+	affordance: ModelAffordance,
+	[width, height]: [number, number],
+	em: number,
+): LaidAffordance {
+	const label = move(
+		labelOf(affordance, em, "start"),
+		(width + GLYPH_GAP) * em,
+		0,
+	);
+	const glyph = {
+		x: 0,
+		y: (label.lineHeight - height * em) / 2,
+		width: width * em,
+		height: height * em,
+	};
+	const box = {
+		x: 0,
+		y: 0,
+		width: label.box.x + label.box.width,
+		height: label.box.height,
+	};
+	return { kind: "affordance", affordance, box, label, glyph };
+}
+
+/** A link: its label on the left, with room for a wavy underline as wide as its widest line. */
+function measureLink(affordance: ModelAffordance, em: number): LaidAffordance {
+	const label = labelOf(affordance, em, "start");
+	const glyph = {
+		x: 0,
+		y: label.box.height - (UNDERLINE_HEIGHT * em) / 2,
+		width: largest(label.lines.map((line) => measure(line, 600, em))),
+		height: UNDERLINE_HEIGHT * em,
+	};
+	const box = {
+		x: 0,
+		y: 0,
+		width: label.box.width,
+		height: glyph.y + glyph.height,
+	};
+	return { kind: "affordance", affordance, box, label, glyph };
+}
+
+/** Copy: its bare label, on the left. */
+function measureCopy(affordance: ModelAffordance, em: number): LaidAffordance {
+	const label = labelOf(affordance, em, "start");
+	return { kind: "affordance", affordance, box: { ...label.box }, label };
+}
+
+/** A scribble: `count` lines as wide as a label wraps, one per line height, the last one shorter; no label. */
+function measureScribble(
+	affordance: ModelAffordance,
+	count: number,
+	em: number,
+): LaidAffordance {
+	const lineHeight = LINE_HEIGHT * em;
+	const scribble = Array.from({ length: count }, (_, i): [Point, Point] => {
+		const y = (i + 0.5) * lineHeight;
+		const share = i === count - 1 ? SCRIBBLE_LAST_LINE : 1;
+		return [
+			{ x: 0, y },
+			{ x: share * LABEL_WRAP * em, y },
+		];
+	});
+	const box = {
+		x: 0,
+		y: 0,
+		width: LABEL_WRAP * em,
+		height: count * lineHeight,
+	};
+	return { kind: "affordance", affordance, box, scribble };
+}
+
 /** `laid`, moved so that its box's top left is at (`x`, `y`). */
 function moveAffordance(
 	laid: LaidAffordance,
@@ -407,10 +569,18 @@ function moveAffordance(
 	y: number,
 ): LaidAffordance {
 	const [dx, dy] = [x - laid.box.x, y - laid.box.y];
+	const shift = (point: Point) => ({ x: point.x + dx, y: point.y + dy });
 	return {
 		...laid,
 		box: { ...laid.box, x, y },
 		...(laid.label && { label: moveBy(laid.label, dx, dy) }),
+		...(laid.glyph && { glyph: { ...laid.glyph, ...shift(laid.glyph) } }),
+		...(laid.scribble && {
+			scribble: laid.scribble.map(([from, to]): [Point, Point] => [
+				shift(from),
+				shift(to),
+			]),
+		}),
 	};
 }
 
