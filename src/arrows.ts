@@ -14,6 +14,7 @@ import type {
 	LaidArrow,
 	LaidPlace,
 	Point,
+	TextBlock,
 } from "./layout.ts";
 
 type Side = LaidArrow["side"];
@@ -124,20 +125,20 @@ export function routeArrows(
  * Where the arrows from `laid` start: on the right side of its outline, at mid-height, for a button, a field or a select;
  * DEPARTURE_GAP right of the end of its label's last line, at mid-height of that line, for an affordance without an
  * outline, whose box is wider than its text by the room kept for the SVG's system fonts. A link's underline ends there
- * too.
+ * too. Only a scribble has no label, and a scribble is copy, which never carries an arrow.
  */
 function startOf(
 	{ affordance, box, label }: LaidAffordance,
 	em: number,
 ): Point {
 	const { mark } = affordance;
-	if (mark === undefined || mark === "field" || mark === "select" || !label) {
+	if (mark === undefined || mark === "field" || mark === "select") {
 		return { x: box.x + box.width, y: box.y + box.height / 2 };
 	}
-	const last = label.lines[label.lines.length - 1];
+	const { lines, x, weight, size, lineHeight, box: text } = label as TextBlock;
 	return {
-		x: label.x + measure(last, label.weight, label.size) + DEPARTURE_GAP * em,
-		y: label.box.y + (label.lines.length - 0.5) * label.lineHeight,
+		x: x + measure(lines[lines.length - 1], weight, size) + DEPARTURE_GAP * em,
+		y: text.y + (lines.length - 0.5) * lineHeight,
 	};
 }
 
