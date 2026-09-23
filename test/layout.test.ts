@@ -805,6 +805,29 @@ describe("layout", () => {
 		assert.ok(link.glyph.width <= link.label.box.width);
 	});
 
+	test("underlines only the last line of a wrapped link, as wide as that line", () => {
+		const [, wrapped, short] = laidOut({
+			variants: [
+				{
+					variant: "A",
+					contains: [
+						{
+							place: "P",
+							contains: [
+								{ affordance: "Buy young plugs, pay by gyro", mark: "link" },
+								{ affordance: "gyro", mark: "link" },
+							],
+						},
+					],
+				},
+			],
+		}).variants[0].items;
+		assert.ok(wrapped.kind === "affordance" && wrapped.label && wrapped.glyph);
+		assert.ok(short.kind === "affordance" && short.glyph);
+		assert.equal(wrapped.label.lines.at(-1), "gyro");
+		assert.equal(wrapped.glyph.width, short.glyph.width);
+	});
+
 	test("draws copy as bare text on the left, wrapped at 12 em", () => {
 		const long =
 			"Share this plot with a neighbour who waters it while you are away for the summer holidays.";

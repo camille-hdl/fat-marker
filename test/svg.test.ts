@@ -371,6 +371,7 @@ describe("renderSvg", () => {
 				"- affordance: Show on the map (toggle)",
 				"- affordance: Garden rules (link)",
 				"- affordance: Planting guide (link)",
+				"- affordance: Swap young plugs with your neighbours (link)",
 				"- affordance: Plot details (chevron)",
 				"- affordance: Reorder favourites (handle)",
 				"- affordance: Book a plot",
@@ -465,7 +466,7 @@ describe("renderSvg", () => {
 		assert.deepEqual(fills, [
 			"#6b6259",
 			"#6b6259",
-			...Array(8).fill("#262a33"),
+			...Array(9).fill("#262a33"),
 		]);
 		for (const group of groups) {
 			assert.match(

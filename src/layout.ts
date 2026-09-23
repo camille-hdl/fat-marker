@@ -514,13 +514,16 @@ function measureGlyphMark(
 	return { kind: "affordance", affordance, box, label, glyph };
 }
 
-/** A link: its label on the left, with room for a wavy underline as wide as its widest line. */
+/**
+ * A link: its label on the left, with room for a wavy underline under its last line, as wide as that line. As wide as
+ * its widest line, the underline of a wrapped link would run past its last line and read as a scribble.
+ */
 function measureLink(affordance: ModelAffordance, em: number): LaidAffordance {
 	const label = labelOf(affordance, em, "start");
 	const glyph = {
 		x: 0,
 		y: label.box.height,
-		width: largest(label.lines.map((line) => measure(line, 600, em))),
+		width: measure(label.lines[label.lines.length - 1], 600, em),
 		height: UNDERLINE_HEIGHT * em,
 	};
 	const box = {
