@@ -62,8 +62,12 @@ The vertical strip right of a variant's column where arrows run to a place that 
 _Avoid_: gutter, channel
 
 **Lane**:
-One arrow's track in a corridor, in data order.
+One arrow's track in a corridor, in data order, or down the right of a place's contents, for a stacked start.
 _Avoid_: track, slot
+
+**Stacked start**:
+An affordance with more of its place below it, whose arrow goes to the place just below that place; its arrow runs down its own lane in its place, so that it crosses none of them.
+_Avoid_: fan, stack
 
 **Hemmed** (place):
 A place with something right of it in a row, or inside such a place; the arrows into its right edge arrive at its bottom, under the names of the row.

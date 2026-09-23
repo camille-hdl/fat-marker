@@ -126,6 +126,7 @@ const fixtures = [
 	"copy-scribble",
 	"arrows",
 	"sample",
+	"fan-in",
 	"uncovered",
 ];
 

@@ -41,6 +41,12 @@ const LANE = 0.6 * em;
 const ARRIVAL_STEP = 1 * em;
 /** How far inside its target's frame an arrow ends, past the edge it reaches. */
 const ENTRY_DEPTH = 0.8 * em;
+/** The lowest an arrival on a side edge is: this far above its bottom corner, so that its head stays inside the frame. */
+const LOW = 0.45 * em;
+/** Between two lanes of a place, right of its contents, for its stacked starts. */
+const STACK_LANE = 1 * em;
+/** Inside a place's frame, around its name and contents. */
+const PLACE_PADDING = 1.15 * em;
 /** How far the ink of an arrow's tip reaches around its last point: half the arrow's stroke (`svg`'s ARROW_STROKE). */
 const TIP_INK = 0.08 * em;
 /** The smallest space the invariants accept between the ink of an arrow's tip and a content of its target. */
@@ -72,6 +78,7 @@ const fixtures = [
 	"copy-scribble",
 	"arrows",
 	"sample",
+	"fan-in",
 ];
 
 const sketches: Record<string, Sketch> = {
@@ -454,7 +461,10 @@ function affordancesOf(
 	return affordances;
 }
 
-/** Whether `point` is on the `side` edge of `frame`, strictly between its corners, or on the bottom corner of a side edge. */
+/**
+ * Whether `point` is on the `side` edge of `frame`, strictly between its corners, and at least LOW above the bottom
+ * corner of a side edge.
+ */
 function onEdge(point: Point, frame: Box, side: LaidArrow["side"]): boolean {
 	if (side === "top") {
 		return (
@@ -467,7 +477,7 @@ function onEdge(point: Point, frame: Box, side: LaidArrow["side"]): boolean {
 	return (
 		close(point.x, x) &&
 		point.y > frame.y + EPSILON &&
-		point.y < bottom(frame) + EPSILON
+		point.y <= bottom(frame) - LOW + EPSILON
 	);
 }
 
@@ -512,8 +522,31 @@ function laneOf({ path }: LaidArrow): number {
  */
 function sideFromTree(
 	variant: ModelVariant,
-	{ from, to }: ModelArrow,
+	arrow: ModelArrow,
 ): LaidArrow["side"] {
+	const { to } = arrow;
+	const { shared, a, t } = branchesOf(variant, arrow);
+	const siblings =
+		shared && shared.kind !== "affordance" ? shared.contents : variant.contents;
+	if (siblings.indexOf(t) !== siblings.indexOf(a) + 1) return "right";
+	/** The places on the top face of a content: itself for a place, all those of a row and of its rows. */
+	const topFace = (content: ModelContent): ModelContent[] =>
+		content.kind === "row" ? content.contents.flatMap(topFace) : [content];
+	/** The leftmost place of a content: itself for a place, the leftmost of the first content of a row. */
+	const leftmost = (content: ModelContent): ModelContent =>
+		content.kind === "row" ? leftmost(content.contents[0]) : content;
+	if (shared?.kind === "row") return leftmost(t) === to ? "left" : "right";
+	return topFace(t).includes(to) ? "top" : "right";
+}
+
+/**
+ * For an arrow of `variant`: `shared`, the deepest container shared by its affordance and its target (none for the
+ * variant), and `a` and `t`, the children of that container that lead to them.
+ */
+function branchesOf(
+	variant: ModelVariant,
+	{ from, to }: ModelArrow,
+): { shared?: ModelContent; a: ModelContent; t: ModelContent } {
 	const lineage = (
 		contents: ModelContent[],
 		sought: ModelContent,
@@ -533,18 +566,25 @@ function sideFromTree(
 	let depth = 0;
 	while (toA[depth] === toT[depth]) depth++;
 	const shared = depth === 0 ? undefined : toA[depth - 1];
-	const siblings =
-		shared && shared.kind !== "affordance" ? shared.contents : variant.contents;
-	const [a, t] = [toA[depth], toT[depth]];
-	if (siblings.indexOf(t) !== siblings.indexOf(a) + 1) return "right";
-	/** The places on the top face of a content: itself for a place, all those of a row and of its rows. */
-	const topFace = (content: ModelContent): ModelContent[] =>
-		content.kind === "row" ? content.contents.flatMap(topFace) : [content];
-	/** The leftmost place of a content: itself for a place, the leftmost of the first content of a row. */
-	const leftmost = (content: ModelContent): ModelContent =>
-		content.kind === "row" ? leftmost(content.contents[0]) : content;
-	if (shared?.kind === "row") return leftmost(t) === to ? "left" : "right";
-	return topFace(t).includes(to) ? "top" : "right";
+	return { shared, a: toA[depth], t: toT[depth] };
+}
+
+/**
+ * The place whose lanes an arrow takes when it starts stacked (spec › Arrow routing): it reaches the top edge of `t'`,
+ * a place, from `a'`, a place whose column does not end with its affordance, through places only.
+ */
+function stackedIn(
+	variant: ModelVariant,
+	arrow: ModelArrow,
+): ModelPlace | undefined {
+	if (sideFromTree(variant, arrow) !== "top") return undefined;
+	const { a, t } = branchesOf(variant, arrow);
+	if (a.kind !== "place" || t !== arrow.to) return undefined;
+	let bottom = a.contents[a.contents.length - 1];
+	while (bottom.kind === "place" && bottom.contents.length > 0) {
+		bottom = bottom.contents[bottom.contents.length - 1];
+	}
+	return bottom === arrow.from ? undefined : a;
 }
 
 /** The points of `cubics`, 32 steps along each, as a polyline. */
@@ -851,11 +891,16 @@ const invariants: [string, (sketch: Sketch, laid: Layout) => void][] = [
 		},
 	],
 	[
-		"gives the places of a column its width, and the places of a row and of the rows in it its height (invariant 5)",
+		"gives the places of a column its width, left of the lanes of the place holding them, and the places of a row and of the rows in it its height (invariant 5)",
 		(_, laid) => {
 			for (const variant of laid.variants) {
 				const boxOf = boxFinder(variant);
 				const places = placesOf(variant);
+				const lanes = new Map<ModelPlace, number>();
+				for (const arrow of variant.variant.arrows) {
+					const place = stackedIn(variant.variant, arrow);
+					if (place) lanes.set(place, (lanes.get(place) ?? 0) + STACK_LANE);
+				}
 				for (const { direction, contents, holder } of siblingGroups(variant)) {
 					const siblings = contents.filter(
 						(content) => content.kind === "place",
@@ -878,10 +923,9 @@ const invariants: [string, (sketch: Sketch, laid: Layout) => void][] = [
 					for (const place of siblings) {
 						const frame = boxOf(place);
 						if (holder) {
-							assert.ok(
-								close(frame.x - column.x, right(column) - right(frame)),
-								place.name.text,
-							);
+							const inset =
+								right(column) - right(frame) - (lanes.get(holder) ?? 0);
+							assert.ok(close(frame.x - column.x, inset), place.name.text);
 						} else {
 							assert.ok(close(frame.width, column.width), place.name.text);
 						}
@@ -976,7 +1020,7 @@ const invariants: [string, (sketch: Sketch, laid: Layout) => void][] = [
 		},
 	],
 	[
-		"starts an arrow on the right side of its affordance at mid-height, and ends it ENTRY_DEPTH inside its target, past the side edge it reaches (arrow invariant 1)",
+		"starts an arrow on the right side of its affordance at mid-height, and ends it ENTRY_DEPTH inside its target, past the side edge it reaches, at least 0.45 em above the bottom corner of a side edge (arrow invariant 1)",
 		(_, laid) => {
 			for (const variant of laid.variants) {
 				const [affordances, places] = [
@@ -1091,6 +1135,77 @@ const invariants: [string, (sketch: Sketch, laid: Layout) => void][] = [
 					if (k > 0) assert.ok(close(lane - lanes[k - 1], LANE), what);
 					for (const point of pointsOf(corridor[k])) {
 						assert.ok(point.x <= lane + EPSILON, what);
+					}
+				}
+			}
+		},
+	],
+	[
+		"gives each stacked start its own lane in its place, right of its contents, 1 em apart, runs down it into the top edge below, and never crosses another arrow of that place's lanes; the slots of that edge are at least 1 em left of the lanes (arrow invariants 5 and 6)",
+		(_, laid) => {
+			for (const variant of laid.variants) {
+				const [boxOf, places] = [boxFinder(variant), placesOf(variant)];
+				const stacked = new Map<ModelPlace, LaidArrow[]>();
+				for (const laidArrow of variant.arrows) {
+					const place = stackedIn(variant.variant, laidArrow.arrow);
+					if (place)
+						stacked.set(place, [...(stacked.get(place) ?? []), laidArrow]);
+				}
+				for (const [place, arrows] of stacked) {
+					const frame = places.get(place)?.frame;
+					assert.ok(frame);
+					const contentsRight = documentOrder(place.contents)
+						.map(boxOf)
+						.reduce(
+							(furthest, box) => Math.max(furthest, right(box)),
+							-Infinity,
+						);
+					const byLane = arrows.toSorted(
+						(one, other) => lastPoint(one).x - lastPoint(other).x,
+					);
+					const lanes = byLane.map((laidArrow) => {
+						const what = arrowName(laidArrow);
+						assert.equal(laidArrow.path.length, 2, what);
+						const [, run] = laidArrow.path;
+						const [{ x }] = run;
+						assert.ok(
+							run.every((point) => close(point.x, x)),
+							what,
+						);
+						assert.ok(run[3].y > run[0].y, what);
+						return x;
+					});
+					for (const [k, lane] of lanes.entries()) {
+						const what = arrowName(byLane[k]);
+						assert.ok(
+							close(lane, contentsRight + (k + 0.5) * STACK_LANE),
+							what,
+						);
+						assert.ok(
+							lane <= right(frame) - PLACE_PADDING - STACK_LANE / 2 + EPSILON,
+							what,
+						);
+					}
+					for (const [k, one] of byLane.entries()) {
+						for (const other of byLane.slice(k + 1)) {
+							assert.ok(
+								!crosses(polyline(one.path), polyline(other.path)),
+								`${arrowName(one)} and ${arrowName(other)}`,
+							);
+						}
+					}
+					const [{ arrow }] = arrows;
+					const slots = variant.arrows.filter(
+						(laidArrow) =>
+							laidArrow.arrow.to === arrow.to &&
+							laidArrow.side === "top" &&
+							!stackedIn(variant.variant, laidArrow.arrow),
+					);
+					for (const slot of slots) {
+						assert.ok(
+							lanes[0] - lastPoint(slot).x >= ARRIVAL_STEP - EPSILON,
+							arrowName(slot),
+						);
 					}
 				}
 			}
@@ -1688,7 +1803,8 @@ describe("layout", () => {
 		assert.ok(onEdge(arrivalOf(arrow), frame, "top"));
 	});
 
-	test("classifies an arrow to the place just right of its branch in a row as right: into its left edge, at the height of its name, 0.8 em past it", () => {
+	test("classifies an arrow to the place just right of its branch in a row as right: into its left edge, no higher than the middle of its name's first line, 0.8 em past it", () => {
+		// the button starts above the middle of the name of Map, which is as tall as the row and starts at its top
 		const [variant, arrow] = arrowFrom("Open", [
 			{
 				place: "Plot",
@@ -1764,17 +1880,22 @@ describe("layout", () => {
 	};
 
 	test("spreads the arrivals on a top edge at (i + 1)/(n + 1) of its part right of the leftmost start and a turn, when that part is at least 1 em per arrow: each bends like an L, the arrow from higher up further right", () => {
+		// in a row, the starts are not stacked: they keep the slots
 		const [variant] = laidOut({
 			variants: [
 				{
 					variant: "A",
 					contains: [
 						{
-							place: "Plot list",
-							contains: ["A", "B", "C"].map((affordance) => ({
-								affordance,
-								to: "Booking",
-							})),
+							row: [
+								{
+									place: "Plot list",
+									contains: ["A", "B", "C"].map((affordance) => ({
+										affordance,
+										to: "Booking",
+									})),
+								},
+							],
 						},
 						{
 							place: "Booking",
@@ -1837,6 +1958,7 @@ describe("layout", () => {
 	});
 
 	test("gives the slots of a top edge from the right, highest start first, to more than 16 arrows", () => {
+		// in a row, the starts are not stacked: they keep the slots
 		const labels = Array.from({ length: 17 }, (_, i) => `Plot ${i + 1}`);
 		const [variant] = laidOut({
 			variants: [
@@ -1844,12 +1966,16 @@ describe("layout", () => {
 					variant: "A",
 					contains: [
 						{
-							place: "Plot list",
-							contains: labels.map((affordance, i) => ({
-								affordance,
-								...(i === 3 && { mark: "field" as const }),
-								to: "Booking",
-							})),
+							row: [
+								{
+									place: "Plot list",
+									contains: labels.map((affordance, i) => ({
+										affordance,
+										...(i === 3 && { mark: "field" as const }),
+										to: "Booking",
+									})),
+								},
+							],
 						},
 						{ place: "Booking" },
 					],
@@ -1899,7 +2025,7 @@ describe("layout", () => {
 		neverCross(variant.arrows.filter(({ arrow }) => arrow.to !== map.place));
 	});
 
-	test("orders the arrows into a left edge so that they never cross, as they are where all of them are drawn", () => {
+	test("orders the arrows into a left edge as their starts, top to bottom, so that they never cross", () => {
 		const [variant] = laidOut({
 			variants: [
 				{
@@ -1924,7 +2050,217 @@ describe("layout", () => {
 			],
 		}).variants;
 		assert.ok(variant.arrows.every(({ side }) => side === "left"));
+		const byStart = variant.arrows.toSorted(
+			(one, other) => firstPoint(one).y - firstPoint(other).y,
+		);
+		const byArrival = variant.arrows.toSorted(
+			(one, other) => lastPoint(one).y - lastPoint(other).y,
+		);
+		assert.deepEqual(byArrival.map(arrowName), byStart.map(arrowName));
 		neverCross(variant.arrows);
+	});
+
+	test("arrives on a left edge at the height of each start, in one straight cubic, the arrivals at least 1 em apart (fan-in)", () => {
+		const [, beside] = laidOut(fixture("fan-in")).variants;
+		assert.equal(beside.arrows.length, 4);
+		for (const arrow of beside.arrows) {
+			const what = arrowName(arrow);
+			assert.equal(arrow.side, "left", what);
+			assert.equal(arrow.path.length, 1, what);
+			const [start] = arrow.path[0];
+			assert.ok(Math.abs(lastPoint(arrow).y - start.y) < 0.1, what);
+			assert.ok(
+				arrow.path[0].every((point) => point.y === start.y),
+				`${what} is not straight`,
+			);
+		}
+		const heights = beside.arrows.map(lastPoint).map(({ y }) => y);
+		for (let i = 1; i < heights.length; i++) {
+			assert.ok(heights[i] - heights[i - 1] >= ARRIVAL_STEP - EPSILON);
+		}
+	});
+
+	test("pushes apart the arrivals on a left edge whose starts are less than 1 em apart, keeping the order of their starts", () => {
+		const [variant] = laidOut({
+			variants: [
+				{
+					variant: "A",
+					contains: [
+						{
+							row: [
+								{
+									place: "Plot",
+									contains: [
+										{
+											row: [
+												{ affordance: "Book", to: "Shed" },
+												{ affordance: "Tools", mark: "checkbox", to: "Shed" },
+											],
+										},
+									],
+								},
+								{ place: "Shed" },
+							],
+						},
+					],
+				},
+			],
+		}).variants;
+		const [book, tools] = variant.arrows;
+		assert.deepEqual([book.side, tools.side], ["left", "left"]);
+		const [bookStart, toolsStart] = [firstPoint(book), firstPoint(tools)];
+		assert.ok(toolsStart.y < bookStart.y);
+		assert.ok(bookStart.y - toolsStart.y < ARRIVAL_STEP);
+		assert.ok(close(lastPoint(tools).y, toolsStart.y));
+		assert.ok(close(lastPoint(book).y, toolsStart.y + ARRIVAL_STEP));
+	});
+
+	test("spreads the arrivals on a left edge too short for 1 em apart evenly, from the middle of its name's first line down to 0.45 em above its bottom corner, in the order of their starts", () => {
+		const labels = [
+			"Book",
+			"Water the beans every evening",
+			"Swap",
+			"Share",
+			"Leave",
+			"Borrow",
+		];
+		const [variant] = laidOut({
+			variants: [
+				{
+					variant: "A",
+					contains: [
+						{
+							row: [
+								{
+									place: "Plot",
+									contains: [
+										{
+											row: labels.map((affordance) => ({
+												affordance,
+												mark: "checkbox" as const,
+												to: "Shed",
+											})),
+										},
+									],
+								},
+								{ place: "Shed" },
+							],
+						},
+					],
+				},
+			],
+		}).variants;
+		const shed = placeNamed(variant, "Shed");
+		const top = shed.name.box.y + shed.name.lineHeight / 2;
+		const lowest = bottom(shed.frame) - LOW;
+		assert.ok(5 * ARRIVAL_STEP > lowest - top);
+		assert.ok(variant.arrows.every(({ side }) => side === "left"));
+		const byStart = variant.arrows.toSorted(
+			(one, other) => firstPoint(one).y - firstPoint(other).y,
+		);
+		assert.notDeepEqual(byStart, variant.arrows);
+		for (const [i, arrow] of byStart.entries()) {
+			assert.ok(
+				close(lastPoint(arrow).y, top + (i * (lowest - top)) / 5),
+				arrowName(arrow),
+			);
+		}
+	});
+
+	test("routes the arrows of stacked starts into a top edge down their own lanes, clear of every other affordance (fan-in)", () => {
+		const [below] = laidOut(fixture("fan-in")).variants;
+		const affordances = [...affordancesOf(below).values()];
+		/** Whether `point` is strictly inside `box`. */
+		const within = (point: Point, box: Box) =>
+			point.x > box.x &&
+			point.x < right(box) &&
+			point.y > box.y &&
+			point.y < bottom(box);
+		assert.equal(below.arrows.length, 4);
+		for (const arrow of below.arrows) {
+			assert.equal(arrow.side, "top", arrowName(arrow));
+			for (const { affordance, box } of affordances) {
+				if (affordance === arrow.arrow.from) continue;
+				assert.ok(
+					polyline(arrow.path).every((point) => !within(point, box)),
+					`${arrowName(arrow)} across ${affordance.text.text}`,
+				);
+			}
+		}
+	});
+
+	test("keeps one lane of 1 em per stacked start right of every content of its place, the highest start outermost; the last content keeps a slot left of them (fan-in)", () => {
+		const [below] = laidOut(fixture("fan-in")).variants;
+		const welcome = placeNamed(below, "Welcome");
+		const contentsRight = documentOrder(welcome.place.contents)
+			.map(boxFinder(below))
+			.reduce((furthest, box) => Math.max(furthest, right(box)), -Infinity);
+		const arrows = arrowsOf(below);
+		const lanes = [
+			"Book a plot",
+			"Swap plots",
+			"Borrow tools from the shed",
+		].map((text) => {
+			const arrow = arrows.get(`${text} → Suggested`);
+			assert.ok(arrow, text);
+			assert.equal(arrow.path.length, 2, text);
+			return lastPoint(arrow).x;
+		});
+		assert.deepEqual(
+			lanes.map((x) => Number(((x - contentsRight) / em).toFixed(6))),
+			[2.5, 1.5, 0.5],
+		);
+		const leave = arrows.get("Leave the garden → Suggested");
+		assert.ok(leave);
+		assert.equal(leave.path.length, 1);
+		assert.ok(lastPoint(leave).x < lanes[2]);
+	});
+
+	test("spreads the slot of a top edge up to 1 em left of the innermost lane of stacked starts: it is at least 1 em from that lane, and still bends like an L", () => {
+		const [variant] = laidOut({
+			variants: [
+				{
+					variant: "A",
+					contains: [
+						{
+							place: "Plots",
+							contains: [
+								{ affordance: "Swap plots", to: "Map" },
+								{ affordance: "Leave it", to: "Map" },
+							],
+						},
+						{ place: "Map" },
+					],
+				},
+			],
+		}).variants;
+		const [swap, leave] = variant.arrows;
+		assert.deepEqual(
+			[swap.path.length, leave.path.length],
+			[2, 1],
+			"Swap plots takes a lane, Leave it a slot",
+		);
+		const lane = lastPoint(swap).x;
+		const turned = firstPoint(leave).x + em;
+		assert.ok(lane - turned >= em && lane - turned < 2 * em);
+		assert.ok(close(lastPoint(leave).x, (turned + lane - ARRIVAL_STEP) / 2));
+		const [[start, one, other, end]] = leave.path;
+		const corner = { x: end.x, y: start.y };
+		assert.deepEqual([one, other], [corner, corner]);
+	});
+
+	test("widens a place with stacked starts by their lanes: Welcome is 3 em wider than with no arrows (fan-in)", () => {
+		const sketch = fixture("fan-in");
+		const [below] = sketch.variants;
+		const plain = JSON.parse(JSON.stringify(below), (key, value) =>
+			key === "to" ? undefined : value,
+		);
+		const [withArrows, without] = [below, plain].map(
+			(variant) =>
+				placeNamed(laidOut({ variants: [variant] }).variants[0], "Welcome")
+					.frame,
+		);
+		assert.ok(close(withArrows.width - without.width, 3 * STACK_LANE));
 	});
 
 	test("turns an arrow into a left edge in the middle of the gap left of it: 0.75 em from a place, 0.5 em from a button", () => {
@@ -2011,7 +2347,7 @@ describe("layout", () => {
 		);
 	});
 
-	test("spreads the arrivals evenly down to the bottom corner of the frame when 1 em apart would pass it", () => {
+	test("spreads the arrivals on a right edge evenly down to 0.45 em above the bottom corner of the frame when 1 em apart would pass it", () => {
 		const [variant] = laidOut({
 			variants: [
 				{
@@ -2036,7 +2372,7 @@ describe("layout", () => {
 		assert.ok(receipt?.kind === "place");
 		const ends = variant.arrows.map(lastPoint);
 		const top = receipt.name.box.y + receipt.name.lineHeight / 2;
-		const lowest = bottom(receipt.frame);
+		const lowest = bottom(receipt.frame) - LOW;
 		assert.ok(
 			top + 3 * ARRIVAL_STEP > lowest,
 			"the frame is too short for 1 em",

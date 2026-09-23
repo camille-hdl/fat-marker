@@ -1,0 +1,66 @@
+{
+	"title": "Arrows into one place",
+	"variants": [
+		{
+			"variant": "A · Suggested below",
+			"contains": [
+				{
+					"place": "Welcome",
+					"contains": [
+						{ "affordance": "What would you like to do?", "read": true },
+						{ "affordance": "Book a plot", "to": "Suggested" },
+						{ "affordance": "Swap plots", "to": "Suggested" },
+						{ "affordance": "Borrow tools from the shed", "to": "Suggested" },
+						{ "affordance": "Leave the garden", "to": "Suggested" }
+					]
+				},
+				{
+					"place": "Suggested",
+					"contains": [
+						{
+							"affordance": "Plots that suit you",
+							"read": true,
+							"scribble": 3
+						},
+						{ "affordance": "Your name", "mark": "field" },
+						{ "affordance": "Go on" }
+					]
+				}
+			]
+		},
+		{
+			"variant": "B · Suggested beside",
+			"contains": [
+				{
+					"row": [
+						{
+							"place": "Welcome",
+							"contains": [
+								{ "affordance": "What would you like to do?", "read": true },
+								{ "affordance": "Book a plot", "to": "Suggested" },
+								{ "affordance": "Swap plots", "to": "Suggested" },
+								{
+									"affordance": "Borrow tools from the shed",
+									"to": "Suggested"
+								},
+								{ "affordance": "Leave the garden", "to": "Suggested" }
+							]
+						},
+						{
+							"place": "Suggested",
+							"contains": [
+								{
+									"affordance": "Plots that suit you",
+									"read": true,
+									"scribble": 3
+								},
+								{ "affordance": "Your name", "mark": "field" },
+								{ "affordance": "Go on" }
+							]
+						}
+					]
+				}
+			]
+		}
+	]
+}
