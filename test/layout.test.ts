@@ -484,7 +484,6 @@ function onEdge(point: Point, frame: Box, side: LaidArrow["side"]): boolean {
 	);
 }
 
-/** Every point of an arrow's cubics, control points included. */
 /**
  * Where the arrows from `laid` start: on the right side of the outline of a button, a field or a select, at mid-height;
  * DEPARTURE_GAP right of the end of the last line of any other affordance's label, as measured, at mid-height of that
@@ -503,6 +502,7 @@ function departureOf({ affordance, box, label }: LaidAffordance): Point {
 	};
 }
 
+/** Every point of an arrow's cubics, control points included. */
 const pointsOf = ({ path }: LaidArrow) => path.flat();
 const firstPoint = ({ path }: LaidArrow) => path[0][0];
 const lastPoint = ({ path }: LaidArrow) => path[path.length - 1][3];
@@ -1874,21 +1874,33 @@ describe("layout", () => {
 		assert.ok(close(start.y, lastLineMiddle(link.label)));
 	});
 
-	test("starts an arrow from a checkbox DEPARTURE_GAP right of the end of its label's last line as measured, at mid-height of that line, and a button's on the right side of its box", () => {
-		const [checkboxText, buttonText] = [
-			"Keep the notes of every unit in the archive",
-			"Next",
-		];
+	test("starts an arrow from a checkbox, a radio, a toggle, a chevron or a handle DEPARTURE_GAP right of the end of its label's last line as measured, at mid-height of that line, and a button's on the right side of its box", () => {
+		const glyphMarks = [
+			"checkbox",
+			"radio",
+			"toggle",
+			"chevron",
+			"handle",
+		] as const;
+		const textOf = (mark: string) =>
+			`Keep the notes of every unit in the archive (${mark})`;
+		const buttonText = "Next";
 		const startOf = startsOf([
-			{ affordance: checkboxText, mark: "checkbox", to: "Q" },
+			...glyphMarks.map((mark) => ({
+				affordance: textOf(mark),
+				mark,
+				to: "Q",
+			})),
 			{ affordance: buttonText, to: "Q" },
 		]);
-		const [checkbox, start] = startOf(checkboxText);
-		const { label } = checkbox;
-		assert.ok(label && label.lines.length > 1);
-		const end = label.x + measure(label.lines[label.lines.length - 1], 600, em);
-		assert.ok(close(start.x, end + DEPARTURE_GAP));
-		assert.ok(close(start.y, lastLineMiddle(label)));
+		for (const mark of glyphMarks) {
+			const [{ label }, start] = startOf(textOf(mark));
+			assert.ok(label && label.lines.length > 1, mark);
+			const end =
+				label.x + measure(label.lines[label.lines.length - 1], 600, em);
+			assert.ok(close(start.x, end + DEPARTURE_GAP), mark);
+			assert.ok(close(start.y, lastLineMiddle(label)), mark);
+		}
 		const [button, buttonStart] = startOf(buttonText);
 		assert.ok(close(buttonStart.x, right(button.box)));
 		assert.ok(close(buttonStart.y, button.box.y + button.box.height / 2));
