@@ -1005,6 +1005,17 @@ const invariants: [string, (sketch: Sketch, laid: Layout) => void][] = [
 						unstretched.add(place);
 					}
 				}
+				/** The width of `content` before its column stretches it: a place fits its name, or its widest content and its lanes; rows and affordances never stretch. */
+				const natural = (content: ModelContent): number => {
+					if (content.kind !== "place") return boxOf(content).width;
+					const name = places.get(content)?.name;
+					assert.ok(name, content.name.text);
+					const widest = Math.max(0, ...content.contents.map(natural));
+					return (
+						Math.max(name.box.width, widest + (lanes.get(content) ?? 0)) +
+						2 * PLACE_PADDING
+					);
+				};
 				for (const { direction, contents, holder } of siblingGroups(variant)) {
 					const siblings = contents.filter(
 						(content) => content.kind === "place",
@@ -1027,11 +1038,11 @@ const invariants: [string, (sketch: Sketch, laid: Layout) => void][] = [
 					for (const place of siblings) {
 						const frame = boxOf(place);
 						if (holder && unstretched.has(holder)) {
-							// as wide as the widest content of the column, at its natural width: one width, left of the lanes
+							// as wide as the widest content of the column, at its natural width, left of the lanes
 							const lanesLeft =
 								right(column) - PLACE_PADDING - (lanes.get(holder) ?? 0);
 							assert.ok(
-								close(frame.width, boxOf(siblings[0]).width),
+								close(frame.width, Math.max(...contents.map(natural))),
 								place.name.text,
 							);
 							assert.ok(right(frame) <= lanesLeft + EPSILON, place.name.text);
