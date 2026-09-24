@@ -1,6 +1,12 @@
 // from @camille-hdl/hill-chart@0.2.0, 738a559
 // functions textBlock (+ anchor "middle", + field), boundingBox, grow, roundOutward, smallest and largest; placeHeading as sketchText (+ wrapping). The rest is new.
-import { departuresOf, routeArrows, stackedLanes } from "./arrows.ts";
+import {
+	departuresOf,
+	lanesFrom,
+	routeArrows,
+	stackedIntoRows,
+	stackedLanes,
+} from "./arrows.ts";
 import { measure, type Weight, wrap } from "./font.ts";
 import type {
 	Mark,
@@ -133,23 +139,27 @@ const MARGIN = 1;
  */
 type Measured = MeasuredPlace | MeasuredAffordance | MeasuredRow;
 type Size = { width: number; height: number };
-/** `lanes`: the width it keeps right of its contents for the lanes of its stacked starts. */
+/**
+ * `lanes`: the width it keeps right of its contents for the lanes of its stacked starts. `contentsWidth`: the width its
+ * contents keep when it stretches, if they do not stretch with it.
+ */
 type MeasuredPlace = Size & {
 	kind: "place";
 	place: ModelPlace;
 	name: TextBlock;
 	contents: Measured[];
 	lanes: number;
+	contentsWidth?: number;
 };
 type MeasuredAffordance = Size & { kind: "affordance"; laid: LaidAffordance };
 /**
- * `holdsPlace`: one of its contents is a place, or a row that holds one. `gaps`: between its contents, in order. `top`:
- * the height it keeps above its contents for the arrows that climb out of its places.
+ * `gaps`: between its contents, in order. `top`: the height it keeps above its contents for the arrows that climb out of
+ * its places.
  */
 type MeasuredRow = Size & {
 	kind: "row";
+	row: ModelRow;
 	contents: Measured[];
-	holdsPlace: boolean;
 	gaps: number[];
 	top: number;
 };
@@ -213,6 +223,8 @@ function placeVariant(variant: ModelVariant, em: number): LaidVariant {
 	const departures = departuresOf(variant, em);
 	const reserved = {
 		lanes: stackedLanes(variant, em),
+		intoRows: stackedIntoRows(variant, em),
+		contentsRight: new Map<ModelPlace, number>(),
 		gaps: departures.gaps,
 		rows: departures.room,
 	};
@@ -310,12 +322,16 @@ function moveVariant(variant: LaidVariant, x: number): LaidVariant {
 
 /**
  * The room the arrows take, read from the tree before placing: the width each place keeps right of its contents for the
- * lanes of its stacked starts, the width a content of a row keeps after it for the lanes out of the hemmed place it
- * ends, and the height a row keeps above its contents and under them for the arrows out of its hemmed places and into
- * them, given its contents laid out at its top, if they have any.
+ * lanes of its stacked starts; the places those lanes reach in a row below, which widen to hold them, given the right of
+ * the contents of the place they start from, as `contentsRight` records it once measured, before them in their column;
+ * the width a content of a row keeps after it for the lanes out of the hemmed place it ends; and the height a row keeps
+ * above its contents and under them for the arrows out of its hemmed places and into them, given its contents laid out
+ * at its top, if they have any.
  */
 type Reserved = {
 	lanes: Map<ModelPlace, number>;
+	intoRows: ReturnType<typeof stackedIntoRows>;
+	contentsRight: Map<ModelPlace, number>;
 	gaps: Map<ModelContent, number>;
 	rows: (
 		row: ModelRow,
@@ -323,13 +339,17 @@ type Reserved = {
 	) => { top: number; band: number };
 };
 
+/** `content`, measured; `left` is where it starts, from the left of the column it is in, through rows. */
 function measureContent(
 	content: ModelContent,
 	em: number,
 	reserved: Reserved,
+	left = 0,
 ): Measured {
-	if (content.kind === "place") return measurePlace(content, em, reserved);
-	if (content.kind === "row") return measureRow(content, em, reserved);
+	if (content.kind === "place") {
+		return measurePlace(content, em, reserved, left);
+	}
+	if (content.kind === "row") return measureRow(content, em, reserved, left);
 	const laid = measureAffordance(content, em);
 	return {
 		kind: "affordance",
@@ -341,31 +361,43 @@ function measureContent(
 
 /**
  * A place: padding around its name, wrapped at the width of its contents or wider, and its contents in a column, with
- * its lanes on their right.
+ * its lanes on their right. A place of a row that stacked starts reach from the place above it is wide enough for their
+ * lanes, from `left`, where it starts; the contents of that place above do not stretch, so that its lanes stay by them.
  */
 function measurePlace(
 	place: ModelPlace,
 	em: number,
 	reserved: Reserved,
+	left: number,
 ): MeasuredPlace {
 	const contents = place.contents.map((content) =>
 		measureContent(content, em, reserved),
 	);
 	const column = columnSize(contents, em);
-	const lanes = reserved.lanes.get(place) ?? 0;
+	const [lanes, padding] = [reserved.lanes.get(place) ?? 0, PLACE_PADDING * em];
 	const size = PLACE_NAME_SIZE * em;
 	const lines = wrap(place.name.text, nameWrap(column.width, em), 700, size);
 	const name = textBlock(lines, 700, size, "start", 0, 0, place.name.field);
 	const below = contents.length === 0 ? 0 : NAME_GAP * em + column.height;
+	const unstretched = reserved.intoRows.from.has(place);
+	// a place whose stacked starts reach a row below is in a column, the one of that row: it starts at its left
+	if (unstretched) reserved.contentsRight.set(place, padding + column.width);
+	let width = Math.max(name.box.width, column.width + lanes) + 2 * padding;
+	const into = reserved.intoRows.into.get(place);
+	if (into) {
+		const contentsRight = reserved.contentsRight.get(into.from) as number;
+		const lanesLeft = lanesFrom(contentsRight, left, em);
+		width = Math.max(width, lanesLeft + into.lanes + padding - left);
+	}
 	return {
 		kind: "place",
 		place,
 		name,
 		contents,
 		lanes,
-		width:
-			Math.max(name.box.width, column.width + lanes) + 2 * PLACE_PADDING * em,
-		height: name.box.height + below + 2 * PLACE_PADDING * em,
+		...(unstretched && { contentsWidth: column.width }),
+		width,
+		height: name.box.height + below + 2 * padding,
 	};
 }
 
@@ -382,37 +414,38 @@ function nameWrap(
 }
 
 /**
- * A row: its contents side by side, apart, the gap after one wider by its reserved width, as tall as the tallest, the
- * room above it for its climbs and its band under it.
+ * A row, from `left`: its contents side by side, apart, the gap after one wider by its reserved width, as tall as the
+ * tallest, the room above it for its climbs and its band under it.
  */
 function measureRow(
 	row: ModelRow,
 	em: number,
 	reserved: Reserved,
+	left: number,
 ): MeasuredRow {
-	const contents = row.contents.map((content) =>
-		measureContent(content, em, reserved),
-	);
-	const gaps = contents
-		.slice(1)
-		.map(
-			(content, i) =>
-				gapBetween(contents[i], content, em) +
-				(reserved.gaps.get(row.contents[i]) ?? 0),
-		);
-	let width = gaps.reduce((sum, gap) => sum + gap, 0);
+	const contents: Measured[] = [];
+	const gaps: number[] = [];
+	let width = 0;
 	let height = 0;
-	for (const content of contents) {
-		width += content.width;
-		height = Math.max(height, content.height);
+	for (const [i, content] of row.contents.entries()) {
+		if (i > 0) {
+			const before = row.contents[i - 1];
+			gaps.push(
+				gapBetween(before, content, em) + (reserved.gaps.get(before) ?? 0),
+			);
+			width += gaps[i - 1];
+		}
+		const measured = measureContent(content, em, reserved, left + width);
+		contents.push(measured);
+		width += measured.width;
+		height = Math.max(height, measured.height);
 	}
-	const holdsPlace = contents.some(isPlaceLike);
 	const bare: MeasuredRow = {
 		kind: "row",
+		row,
 		contents,
 		width,
 		height,
-		holdsPlace,
 		gaps,
 		top: 0,
 	};
@@ -439,23 +472,36 @@ function columnSize(contents: Measured[], em: number): Size {
 function gapsAlong(contents: Measured[], em: number): number {
 	let sum = 0;
 	for (let i = 1; i < contents.length; i++) {
-		sum += gapBetween(contents[i - 1], contents[i], em);
+		sum += gapBetween(modelOf(contents[i - 1]), modelOf(contents[i]), em);
 	}
 	return sum;
 }
 
 /**
- * Between two neighbours of a column or of a row: wider between places, or rows that hold places, than next to an
- * affordance or a row of affordances.
+ * Between two neighbours of a column or of a row, read from the tree: wider between places, or rows that hold places,
+ * than next to an affordance or a row of affordances.
  */
-function gapBetween(one: Measured, other: Measured, em: number): number {
+function gapBetween(
+	one: ModelContent,
+	other: ModelContent,
+	em: number,
+): number {
 	const placeLike = isPlaceLike(one) && isPlaceLike(other);
 	return (placeLike ? PLACE_GAP : CONTENT_GAP) * em;
 }
 
-/** A place, or a row that holds one: its frames need the wider gap. */
-function isPlaceLike(content: Measured): boolean {
-	return content.kind === "row" ? content.holdsPlace : content.kind === "place";
+/** A place, or a row that holds one, at any depth of rows: its frames need the wider gap. */
+function isPlaceLike(content: ModelContent): boolean {
+	return content.kind === "row"
+		? content.contents.some(isPlaceLike)
+		: content.kind === "place";
+}
+
+/** The content of the model that `measured` measures. */
+function modelOf(measured: Measured): ModelContent {
+	if (measured.kind === "place") return measured.place;
+	if (measured.kind === "row") return measured.row;
+	return measured.laid.affordance;
 }
 
 /**
@@ -470,7 +516,7 @@ function placeColumn(
 ): void {
 	let y = at.y;
 	for (const [i, content] of contents.entries()) {
-		if (i > 0) y += gapBetween(contents[i - 1], content, em);
+		if (i > 0) y += gapBetween(modelOf(contents[i - 1]), modelOf(content), em);
 		placeContent(
 			content,
 			{ x: at.x, y, width: at.width, height: content.height },
@@ -530,7 +576,7 @@ function placeContent(
 
 /**
  * Lays a place out in `frame`: its name at the top left, its contents in a column below, as wide as the frame allows
- * left of its lanes.
+ * left of its lanes, or as wide as they are when they do not stretch.
  */
 function placePlace(
 	measured: MeasuredPlace,
@@ -546,7 +592,8 @@ function placePlace(
 		{
 			x: frame.x + padding,
 			y: name.box.y + name.box.height + NAME_GAP * em,
-			width: frame.width - 2 * padding - measured.lanes,
+			width:
+				measured.contentsWidth ?? frame.width - 2 * padding - measured.lanes,
 		},
 		em,
 		items,

@@ -66,7 +66,7 @@ One arrow's track in a corridor, in data order, or down the right of a place's c
 _Avoid_: track, slot
 
 **Stacked start**:
-An affordance with more of its place below it, whose arrow goes to the place just below that place; its arrow runs down its own lane in its place, so that it crosses none of them.
+An affordance with more of its place below it, whose arrow goes to the place just below that place, or to a place of the row just below it; its arrow runs down its own lane in its place, so that it crosses none of them. Into a place of a row, the lanes stay over that place, which widens to hold them.
 _Avoid_: fan, stack
 
 **Hemmed** (place):

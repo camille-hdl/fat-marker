@@ -1,0 +1,131 @@
+{
+	"title": "Arrows into a place of a row below",
+	"variants": [
+		{
+			"variant": "A · Suggested left of Shed",
+			"contains": [
+				{
+					"place": "Welcome",
+					"contains": [
+						{
+							"affordance": "What would you like to do?",
+							"read": true
+						},
+						{
+							"affordance": "Book a plot",
+							"to": "Suggested"
+						},
+						{
+							"affordance": "Swap plots",
+							"to": "Suggested"
+						},
+						{
+							"affordance": "Borrow tools from the shed",
+							"to": "Suggested"
+						},
+						{
+							"affordance": "Leave the garden",
+							"to": "Suggested"
+						}
+					]
+				},
+				{
+					"row": [
+						{
+							"place": "Suggested",
+							"contains": [
+								{
+									"affordance": "Plots that suit you",
+									"read": true,
+									"scribble": 3
+								},
+								{
+									"affordance": "Your name",
+									"mark": "field"
+								},
+								{
+									"affordance": "Go on"
+								}
+							]
+						},
+						{
+							"place": "Shed",
+							"contains": [
+								{
+									"affordance": "Tools and seeds to borrow",
+									"read": true
+								},
+								{
+									"affordance": "Borrow"
+								}
+							]
+						}
+					]
+				}
+			]
+		},
+		{
+			"variant": "B · Suggested right of Shed",
+			"contains": [
+				{
+					"place": "Welcome",
+					"contains": [
+						{
+							"affordance": "What would you like to do?",
+							"read": true
+						},
+						{
+							"affordance": "Book a plot",
+							"to": "Suggested"
+						},
+						{
+							"affordance": "Swap plots",
+							"to": "Suggested"
+						},
+						{
+							"affordance": "Borrow tools from the shed",
+							"to": "Suggested"
+						},
+						{
+							"affordance": "Leave the garden",
+							"to": "Suggested"
+						}
+					]
+				},
+				{
+					"row": [
+						{
+							"place": "Shed",
+							"contains": [
+								{
+									"affordance": "Tools and seeds to borrow",
+									"read": true
+								},
+								{
+									"affordance": "Borrow"
+								}
+							]
+						},
+						{
+							"place": "Suggested",
+							"contains": [
+								{
+									"affordance": "Plots that suit you",
+									"read": true,
+									"scribble": 3
+								},
+								{
+									"affordance": "Your name",
+									"mark": "field"
+								},
+								{
+									"affordance": "Go on"
+								}
+							]
+						}
+					]
+				}
+			]
+		}
+	]
+}
