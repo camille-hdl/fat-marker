@@ -3,6 +3,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { describe, test } from "node:test";
+import { departuresOf, routeArrows } from "../src/arrows.ts";
 import { measure } from "../src/font.ts";
 import {
 	type Affordance,
@@ -3201,6 +3202,151 @@ describe("layout", () => {
 		assert.ok(down && up);
 		assert.ok(exitRunOf(down).y > bottom(left.frame) - 2 * em);
 		assert.ok(exitRunOf(up).y < left.frame.y);
+	});
+
+	test("departure: goes down to a place nested in a hemmed place of its row whose bottom is lower than its start, though its name is higher", () => {
+		const copy = (affordance: string) => ({ affordance, read: true });
+		const [variant] = laidOut({
+			variants: [
+				{
+					variant: "A",
+					contains: [
+						{
+							row: [
+								{
+									place: "Left",
+									contains: [
+										copy("Opening hours"),
+										copy("Who to call"),
+										{ affordance: "Go to the tools", to: "Tools" },
+									],
+								},
+								{
+									place: "Middle",
+									contains: [
+										{
+											place: "Tools",
+											contains: [
+												copy("Rakes"),
+												copy("Spades"),
+												copy("Hoes"),
+												copy("Shears"),
+											],
+										},
+									],
+								},
+								{ place: "Right" },
+							],
+						},
+					],
+				},
+			],
+		}).variants;
+		const [left, tools] = ["Left", "Tools"].map((name) =>
+			placeNamed(variant, name),
+		);
+		const arrow = arrowsOf(variant).get("Go to the tools → Tools");
+		assert.ok(arrow);
+		const start = firstPoint(arrow);
+		assert.ok(tools.name.box.y + tools.name.box.height < start.y);
+		assert.ok(bottom(tools.frame) - LOW > start.y);
+		assert.ok(exitRunOf(arrow).y > bottom(left.frame) - 2 * em);
+	});
+
+	/** A row that opens its variant, whose hemmed place `Left` has a button to a place of the row whose name is higher. */
+	const upToHigh: Sketch = {
+		variants: [
+			{
+				variant: "A",
+				contains: [
+					{
+						row: [
+							{
+								place: "Left",
+								contains: [
+									{ affordance: "Opening hours", read: true },
+									{ affordance: "Who to call", read: true },
+									{ affordance: "Up to High", to: "High" },
+								],
+							},
+							{
+								place: "Right",
+								contains: [
+									{ place: "High" },
+									{ affordance: "Where the key is", read: true },
+								],
+							},
+						],
+					},
+				],
+			},
+		],
+	};
+
+	test("departure: climbs out of a row that opens its variant in the middle of the gap under the variant's name", () => {
+		const [variant] = laidOut(upToHigh).variants;
+		const left = placeNamed(variant, "Left");
+		const arrow = arrowsOf(variant).get("Up to High → High");
+		assert.ok(arrow);
+		const middle = (bottom(variant.heading.box) + left.frame.y) / 2;
+		assert.ok(close(exitRunOf(arrow).y, middle));
+	});
+
+	test("departure: routing fails on a departure whose row's room was not measured", () => {
+		const [laid] = laidOut(upToHigh).variants;
+		const unsettled = departuresOf(laid.variant, em);
+		assert.ok(
+			unsettled.departures.some(
+				(departure) => departure && departure.down === undefined,
+			),
+		);
+		assert.throws(
+			() =>
+				routeArrows(
+					laid.variant,
+					laid.column,
+					bottom(laid.heading.box),
+					laid.items,
+					unsettled,
+					em,
+				),
+			/unsettled/,
+		);
+	});
+
+	test("departure: goes down to a place before its row anchored in the band of a row that holds it", () => {
+		const [variant] = laidOut({
+			variants: [
+				{
+					variant: "A",
+					contains: [
+						{
+							row: [
+								{ place: "Home" },
+								{
+									place: "Garden",
+									contains: [
+										{
+											row: [
+												{
+													place: "Beds",
+													contains: [{ affordance: "Back home", to: "Home" }],
+												},
+												{ place: "Paths" },
+											],
+										},
+									],
+								},
+							],
+						},
+					],
+				},
+			],
+		}).variants;
+		const beds = placeNamed(variant, "Beds");
+		const arrow = arrowsOf(variant).get("Back home → Home");
+		assert.ok(arrow);
+		assert.ok(exitRunOf(arrow).y > bottom(beds.frame) - 2 * em);
 	});
 
 	test("reserves 0.6 em of corridor right of the column for each corridor arrow", () => {

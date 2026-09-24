@@ -223,9 +223,11 @@ function placeVariant(variant: ModelVariant, em: number): LaidVariant {
 	const items: LaidVariant["items"] = [];
 	placeColumn(contents, { x: 0, y: 0, width }, em, items);
 	const column = { x: 0, y: 0, width, height };
+	const headingBottom = column.y - HEADING_GAP * em;
 	const { arrows, corridor } = routeArrows(
 		variant,
 		column,
+		headingBottom,
 		items,
 		departures,
 		em,
@@ -243,7 +245,7 @@ function placeVariant(variant: ModelVariant, em: number): LaidVariant {
 		size,
 		"start",
 		0,
-		-HEADING_GAP * em - (lines.length * LINE_HEIGHT * size) / 2,
+		headingBottom - (lines.length * LINE_HEIGHT * size) / 2,
 		variant.name.field,
 	);
 	return {

@@ -54,8 +54,6 @@ const ENTRY_DEPTH = 0.8;
 const STACK_LANE = 1;
 /** How far right of the end of its text an arrow from an affordance without an outline starts. */
 const DEPARTURE_GAP = 0.4;
-/** Between a variant's name and its column (layout's HEADING_GAP): the gap above a row that opens the variant. */
-const HEADING_GAP = 0.8;
 /** The most lanes the gap after an exit holds at its usual width; it widens by EXIT_LANE_ROOM for each one past them. */
 const EXIT_LANES = 3;
 const EXIT_LANE_ROOM = 0.5;
@@ -79,8 +77,8 @@ type Exit = {
 
 /**
  * How a corridor arrow from a hemmed place leaves it: through its exit, down to the band of the exit's row or up above
- * that row. `down` is unknown before measuring when the target is another place of that row, outside its band, until
- * the row's `room` settles it.
+ * that row. `down` is unknown before measuring when the target is a place of that row, or nested in one, outside the
+ * band of a row that holds the exit's, until the row's `room` settles it.
  */
 type Departure = { exit: Exit; down?: boolean };
 
@@ -107,17 +105,19 @@ export type Departures = {
 };
 
 /**
- * Routes the arrows of `variant`, laid out as `items` in `column`, in data order. An arrow to the place just below its
- * affordance's branch reaches its top edge, and one to the place just right of it in a row its left edge, each in one
- * cubic, except the arrow of a stacked start, which turns into its own lane in its place and runs down it; every other
- * arrow runs through its own lane in a corridor right of the column, into the right edge of its target, with a flat
- * last turn when that target is hemmed, after its way out of the hemmed place it starts in, if any, down or up the gap
- * after its exit and along the band of its row, or above that row, as its `departures` give it. Each ends ENTRY_DEPTH
- * past the edge it reaches. Also returns the width the corridor takes right of the column.
+ * Routes the arrows of `variant`, laid out as `items` in `column` under its name, whose bottom is at `headingBottom`,
+ * in data order. An arrow to the place just below its affordance's branch reaches its top edge, and one to the place
+ * just right of it in a row its left edge, each in one cubic, except the arrow of a stacked start, which turns into its
+ * own lane in its place and runs down it; every other arrow runs through its own lane in a corridor right of the
+ * column, into the right edge of its target, with a flat last turn when that target is hemmed, after its way out of the
+ * hemmed place it starts in, if any, down or up the gap after its exit and along the band of its row, or above that
+ * row, as its `departures` give it. Each ends ENTRY_DEPTH past the edge it reaches. Also returns the width the corridor
+ * takes right of the column.
  */
 export function routeArrows(
 	variant: ModelVariant,
 	column: Box,
+	headingBottom: number,
 	items: Items,
 	{ departures }: Departures,
 	em: number,
@@ -147,7 +147,7 @@ export function routeArrows(
 		starts,
 		places,
 		boxOf,
-		column,
+		headingBottom,
 		em,
 	);
 	/** Where each arrow runs right to its lane from: its start, or the end of its way out of a hemmed place. */
@@ -228,7 +228,8 @@ type ExitLane = Point & { radius: number };
  * start leftmost, then the descents, the highest start rightmost. The descents of one row each take a height in its
  * band, above its arrivals, every ARRIVAL_STEP up from the leftmost lane; its climbs, in the middle of the gap above it,
  * ARRIVAL_STEP apart, the leftmost lane highest. So the departures of one row nest: each turns out of the row inside
- * those that start below it on its way. Their turns in the gap are bounded by half its width.
+ * those that start below it on its way. Their turns in the gap are bounded by half its width. Throws when the
+ * direction of a departure is unsettled: its row was not measured.
  */
 function exitLanes(
 	departures: (Departure | undefined)[],
@@ -236,7 +237,7 @@ function exitLanes(
 	starts: Point[],
 	places: Map<ModelPlace, LaidPlace>,
 	boxOf: (content: ModelPlace | ModelAffordance) => Box,
-	column: Box,
+	headingBottom: number,
 	em: number,
 ): (ExitLane | undefined)[] {
 	const leftOf = (content: ModelContent): number =>
@@ -252,6 +253,11 @@ function exitLanes(
 	const byRow = new Map<ModelRow, number[]>();
 	for (const [i, departure] of departures.entries()) {
 		if (!departure) continue;
+		if (departure.down === undefined) {
+			throw new Error(
+				`The direction of the departure of arrow ${i} is unsettled: its row's room was not measured.`,
+			);
+		}
 		const { place, row } = departure.exit;
 		append(byExit, place, i);
 		append(byRow, row, i);
@@ -292,7 +298,7 @@ function exitLanes(
 				? bottomOf(above.content)
 				: above.holder
 					? nameBottom(places.get(above.holder) as LaidPlace)
-					: column.y - HEADING_GAP * em;
+					: headingBottom;
 		const climbs = byLane.filter((i) => !down(i));
 		const middle = (top + frame.y) / 2;
 		for (const [j, i] of climbs.entries()) {
@@ -324,13 +330,15 @@ export function stackedLanes(
 }
 
 /**
- * The departures of the corridor arrows of `variant` from its hemmed places, in data order, and the room they take, read
- * from the tree like the corridor. An arrow leaves through the gap after the outermost hemmed place of its branch in its
- * row: down to the row's band when its target is after the row, or in its band; up above the row when its target is
- * before it; for another place of the row, down when the middle of that place's name is lower than the start, which
- * `room` settles from the row laid out on its own. That gap is wider by EXIT_LANE_ROOM for each of its lanes past
- * EXIT_LANES. A row is taller under its places by ARRIVAL_STEP for each arrival and descent of its band past the first,
- * so that they all run under the contents of its places, and above them by ARRIVAL_STEP for each climb past the first.
+ * The departures of the corridor arrows of `variant` from its hemmed places, in data order, and the room they take,
+ * read from the tree like the corridor. An arrow leaves through the gap after the outermost hemmed place of its branch
+ * in its row: down to the row's band when its target is after the row, or anchored in the band of a row that holds it;
+ * up above the row when its target is before it otherwise; for a place of the row, or nested in one, down when its
+ * arrivals are lower than the start, which `room` settles from the row laid out on its own: LOW above its bottom for a
+ * place anchored at its own bottom, the middle of its name's first line for the others. That gap is wider by
+ * EXIT_LANE_ROOM for each of its lanes past EXIT_LANES. A row is taller under its places by ARRIVAL_STEP for each
+ * arrival and descent of its band past the first, so that they all run under the contents of its places, and above them
+ * by ARRIVAL_STEP for each climb past the first.
  */
 export function departuresOf(variant: ModelVariant, em: number): Departures {
 	const routes = routesOf(variant);
@@ -343,8 +351,14 @@ export function departuresOf(variant: ModelVariant, em: number): Departures {
 			if (!exit || routes[i].side !== "right") return undefined;
 			const at = first.get(to) as number;
 			if (at > (last.get(exit.row) as number)) return { exit, down: true };
+			const anchor = anchors.get(to);
+			const holdsExit =
+				anchor?.kind === "row" &&
+				(first.get(anchor) as number) <= (first.get(exit.row) as number) &&
+				(last.get(anchor) as number) >= (last.get(exit.row) as number);
+			if (holdsExit) return { exit, down: true };
 			if (at < (first.get(exit.row) as number)) return { exit, down: false };
-			return anchors.get(to) === exit.row ? { exit, down: true } : { exit };
+			return { exit };
 		},
 	);
 	const arrivals = bandArrivals(variant, routes, anchors);
@@ -376,9 +390,13 @@ export function departuresOf(variant: ModelVariant, em: number): Departures {
 			const departure = departures[i] as Departure;
 			if (departure.down !== undefined) continue;
 			const { from, to } = variant.arrows[i];
-			const { name } = laid.get(to) as LaidPlace;
+			const { name, frame } = laid.get(to) as LaidPlace;
 			const start = startOf(laid.get(from) as LaidAffordance, em);
-			departure.down = name.box.y + name.lineHeight / 2 > start.y;
+			const arrival =
+				anchors.get(to) === to
+					? frame.y + frame.height - LOW * em
+					: name.box.y + name.lineHeight / 2;
+			departure.down = arrival > start.y;
 		}
 	};
 	const steps = (count: number) => Math.max(0, count - 1) * ARRIVAL_STEP * em;
