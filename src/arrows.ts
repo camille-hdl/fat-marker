@@ -70,6 +70,9 @@ const EXIT_LANE_ROOM = 0.5;
  */
 type Route = { side: Side; stackedIn?: ModelPlace; intoRow?: boolean };
 
+/** The lanes of stacked starts into a place of a row below: the place they start from, and their width. */
+type LanesInto = { from: ModelPlace; lanes: number };
+
 /** Where the corridor arrows from the affordances of a hemmed place leave it, read from the tree. */
 type Exit = {
 	/** The outermost hemmed place of the affordance's branch. */
@@ -346,13 +349,10 @@ export function stackedLanes(
 export function stackedIntoRows(
 	variant: ModelVariant,
 	em: number,
-): {
-	from: Set<ModelPlace>;
-	into: Map<ModelPlace, { from: ModelPlace; lanes: number }>;
-} {
+): { from: Set<ModelPlace>; into: Map<ModelPlace, LanesInto> } {
 	const [from, into] = [
 		new Set<ModelPlace>(),
-		new Map<ModelPlace, { from: ModelPlace; lanes: number }>(),
+		new Map<ModelPlace, LanesInto>(),
 	];
 	for (const [i, { stackedIn, intoRow }] of routesOf(variant).entries()) {
 		if (!stackedIn || !intoRow) continue;

@@ -2572,26 +2572,15 @@ describe("layout", () => {
 				.filter(({ path }) => path.length === 2)
 				.map((arrow) => Number(((lastPoint(arrow).x - start) / em).toFixed(6)));
 			assert.deepEqual(lanes, [2.5, 1.5, 0.5], first);
+			// A: Suggested is widened to its outermost lane; B: it is wide enough already
+			const outermost = start + 3 * STACK_LANE + PLACE_PADDING;
 			assert.ok(
-				right(suggested) >= start + 3 * STACK_LANE + PLACE_PADDING - EPSILON,
+				first === "contents"
+					? close(right(suggested), outermost)
+					: right(suggested) >= outermost - EPSILON,
 				first,
 			);
 		}
-		const suggested = placeNamed(left, "Suggested").frame;
-		assert.ok(
-			close(
-				right(suggested),
-				documentOrder(placeNamed(left, "Welcome").place.contents)
-					.map(boxFinder(left))
-					.reduce(
-						(furthest, box) => Math.max(furthest, right(box)),
-						-Infinity,
-					) +
-					3 * STACK_LANE +
-					PLACE_PADDING,
-			),
-			"Suggested is widened to its outermost lane",
-		);
 	});
 
 	test("keeps the places nested in a place whose stacked starts reach a place of a row below as wide as its widest content, when a wider row stretches it, so that its lanes stay over that place", () => {
