@@ -3679,6 +3679,26 @@ describe("checkSketch", () => {
 		]);
 	});
 
+	test("warns of at most three texts per arrow, the first it runs through", () => {
+		const buttons = Array.from({ length: 4000 }, (_, i) => ({
+			affordance: `B${i}`,
+			to: "Far",
+		}));
+		const sketch = structuredClone(crossingSketch);
+		const place = sketch.variants[0].contains[0] as Place;
+		place.contains = [{ row: buttons }];
+		const byArrow = new Map<string, string[]>();
+		for (const { field, message } of checkSketch(sketch))
+			byArrow.set(field, [...(byArrow.get(field) ?? []), message]);
+		assert.ok(byArrow.size > 3000, `${byArrow.size} arrows warned of`);
+		for (const [field, messages] of byArrow)
+			assert.ok(messages.length <= 3, `${field}: ${messages.length}`);
+		assert.deepEqual(
+			byArrow.get("variants[0].contains[0].contains[0].row[0].to"),
+			[1, 2, 3].map((i) => `arrow "B0 → Far" crosses the label "B${i}"`),
+		);
+	});
+
 	test("warns with the characters unsafe to print escaped", () => {
 		const sketch = structuredClone(crossingSketch);
 		const place = sketch.variants[0].contains[0] as Place;
@@ -3732,7 +3752,8 @@ describe("checkSketch", () => {
 				count++;
 			}
 		}
-		// 597 on 2026-09-24, in 124 of the sketches: their rows of buttons and scribbles are denser than a usual sketch's.
+		// 581 on 2026-09-24, three per arrow at most, in 124 of the sketches: their rows of buttons and scribbles are denser
+		// than a usual sketch's.
 		assert.ok(count > 0);
 	});
 });

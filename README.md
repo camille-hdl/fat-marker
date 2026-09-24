@@ -192,10 +192,11 @@ The API reads no files and has no input size limit; set a limit before parsing u
 `Sketch`, `Variant`, `Place`, `Affordance`, `Row`, `Theme` and `Warning` types.
 
 `checkSketch(sketch, theme?)` returns a `Warning[]`: one `{ field, message }` for each text an arrow runs through, a
-place's name or an affordance's label or scribble, other than the arrow's own affordance's. It lays the sketch out as
-`renderSvg` does, draws nothing, and throws the same `FatMarkerError` on invalid input. An arrow may cross frames and
-outlines, which its halo keeps legible; those are not reported. For the sketch where `Go` sits in a row beside `Label`,
-and its target `Far` is further down:
+place's name or an affordance's label or scribble, other than the arrow's own affordance's. An arrow gets three warnings
+at most, for the first texts along its path: enough to move it or what it crosses. It lays the sketch out as `renderSvg`
+does, draws nothing, and throws the same `FatMarkerError` on invalid input. It is synchronous, and takes about half a
+second at the CLI's 1 MiB limit. An arrow may cross frames and outlines, which its halo keeps legible; those are not
+reported. For the sketch where `Go` sits in a row beside `Label`, and its target `Far` is further down:
 
 ```js
 checkSketch(sketch);
