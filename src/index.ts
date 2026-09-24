@@ -1,5 +1,5 @@
 // from @camille-hdl/hill-chart@0.2.0, 738a559
-// adapted: renamed for fat-marker
+// adapted: renamed for fat-marker; checkSketch is new
 import { readSketch, readTheme, type Sketch, type Theme } from "./input.ts";
 import { crossings, layout, type Warning } from "./layout.ts";
 import { toPng } from "./png.ts";

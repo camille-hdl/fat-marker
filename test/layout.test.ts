@@ -3681,7 +3681,7 @@ describe("checkSketch", () => {
 		);
 	});
 
-	test("warns of nothing and throws FatMarkerError on invalid data, as renderSvg", () => {
+	test("throws FatMarkerError on invalid data or theme, as renderSvg, rather than warn", () => {
 		const sketch = {
 			variants: [{ variant: "A", contains: [{ place: "P", contains: [] }] }],
 		};

@@ -1118,7 +1118,7 @@ export type Warning = { field: string; message: string };
  * A text an arrow may run through: what kind it is, as a message words it, the element it belongs to, and its rank in
  * document order.
  */
-type Text = {
+type CrossableText = {
 	kind: "name" | "label" | "scribble";
 	text: string;
 	of: ModelPlace | ModelAffordance;
@@ -1127,7 +1127,7 @@ type Text = {
 };
 
 /** The texts of a variant from the highest top down, and the height of the tallest. */
-type TextsByTop = { texts: Text[]; tallest: number };
+type TextsByTop = { texts: CrossableText[]; tallest: number };
 
 /** How many straight steps each cubic of an arrow is flattened into, before looking for the texts it runs through. */
 const FLATTENING_STEPS = 32;
@@ -1142,7 +1142,7 @@ export function crossings(laid: Layout): Warning[] {
 	return laid.variants.flatMap(({ items, arrows }) => {
 		const byTop = textsByTop(items);
 		return arrows.flatMap(({ arrow, path }) => {
-			const crossed = new Set<Text>();
+			const crossed = new Set<CrossableText>();
 			for (const cubic of path) {
 				const { bounds, points } = flatten(cubic);
 				for (const text of textsAcross(byTop, bounds)) {
@@ -1163,7 +1163,7 @@ export function crossings(laid: Layout): Warning[] {
 }
 
 function textsByTop(items: (LaidPlace | LaidAffordance)[]): TextsByTop {
-	const texts = items.map((item, rank): Text => {
+	const texts = items.map((item, rank): CrossableText => {
 		if (item.kind === "place") {
 			const { place, name } = item;
 			return {
@@ -1189,14 +1189,17 @@ function textsByTop(items: (LaidPlace | LaidAffordance)[]): TextsByTop {
 }
 
 /** The texts of `byTop` whose height `bounds` reaches: a slice of them, found by bisection. */
-function textsAcross({ texts, tallest }: TextsByTop, bounds: Box): Text[] {
+function textsAcross(
+	{ texts, tallest }: TextsByTop,
+	bounds: Box,
+): CrossableText[] {
 	let [low, high] = [0, texts.length];
 	while (low < high) {
 		const middle = (low + high) >> 1;
 		if (texts[middle].box.y + tallest <= bounds.y) low = middle + 1;
 		else high = middle;
 	}
-	const across: Text[] = [];
+	const across: CrossableText[] = [];
 	for (let i = low; i < texts.length; i++) {
 		const { box } = texts[i];
 		if (box.y >= bounds.y + bounds.height) break;

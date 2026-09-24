@@ -1,5 +1,5 @@
 // from @camille-hdl/hill-chart@0.2.0, 738a559
-// adapted: renamed for fat-marker (FatMarkerError, name, messages); SVG only, without --format nor PNG; provisional help; the input limit's comment rewritten
+// adapted: renamed for fat-marker (FatMarkerError, name, messages); SVG only, without --format nor PNG; provisional help; the input limit's comment rewritten; warnings on stderr, new
 import { createReadStream } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
 import { extname } from "node:path";
@@ -73,8 +73,8 @@ Examples:
   cat sketch.json | fat-marker -o sketch.svg
 
 Exit codes:
-  0  success, even with warnings: each arrow that runs through a place's name or an
-     affordance's label is reported on stderr, "fat-marker: warning: <file>: <field>: …"
+  0  success, even with warnings: each arrow that runs through a name, a label or a
+     scribble is reported on stderr, "fat-marker: warning: <file>: <field>: …"
   1  invalid JSON, data or theme, an input over 1 MiB, or a PNG that cannot be drawn; the
      message names the file, and the field when there is one
   2  usage error, or a file that cannot be read or written
