@@ -127,6 +127,7 @@ const fixtures = [
 	"arrows",
 	"sample",
 	"fan-in",
+	"fan-in-row",
 	"departures-shared",
 	"departures-row",
 	"uncovered",

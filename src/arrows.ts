@@ -52,14 +52,26 @@ const LOW = 0.45;
 const ENTRY_DEPTH = 0.8;
 /** The width of one lane of a place, right of its contents, down which the arrow of a stacked start runs. */
 const STACK_LANE = 1;
+/**
+ * The least room left of the lanes of stacked starts on the top edge of a place of a row below, from its left corner:
+ * the slot of the arrow from the bottom of their place stays ARRIVAL_STEP left of the innermost lane, half a lane right
+ * of the room.
+ */
+const SLOT_ROOM = 1.5;
 /** How far right of the end of its text an arrow from an affordance without an outline starts. */
 const DEPARTURE_GAP = 0.4;
 /** The most lanes the gap after an exit holds at its usual width; it widens by EXIT_LANE_ROOM for each one past them. */
 const EXIT_LANES = 3;
 const EXIT_LANE_ROOM = 0.5;
 
-/** How an arrow is routed, read from the tree: the side of its target it reaches, and the place whose lanes it takes. */
-type Route = { side: Side; stackedIn?: ModelPlace };
+/**
+ * How an arrow is routed, read from the tree: the side of its target it reaches, the place whose lanes it takes, and
+ * whether its target is then a place of a row below that place, which is not stretched to their column's width.
+ */
+type Route = { side: Side; stackedIn?: ModelPlace; intoRow?: boolean };
+
+/** The lanes of stacked starts into a place of a row below: the place they start from, and their width. */
+type LanesInto = { from: ModelPlace; lanes: number };
 
 /** Where the corridor arrows from the affordances of a hemmed place leave it, read from the tree. */
 type Exit = {
@@ -314,19 +326,45 @@ function nameBottom({ name }: LaidPlace): number {
 }
 
 /**
- * The width each place of `variant` keeps right of its contents for the lanes of its stacked starts, STACK_LANE each,
- * read from the tree: known before placing, like the corridor's.
+ * The lanes of the stacked starts of `variant`, read from the tree: known before placing, like the corridor's. `lanes`,
+ * the width each place keeps right of its contents for them, STACK_LANE each; `from`, the places whose stacked starts
+ * reach a place of a row below, whose contents keep their natural width; `into`, the places they reach, each with the
+ * place they start from and the width of their lanes, which that place holds.
  */
 export function stackedLanes(
 	variant: ModelVariant,
 	em: number,
-): Map<ModelPlace, number> {
-	const widths = new Map<ModelPlace, number>();
-	for (const { stackedIn } of routesOf(variant)) {
+): {
+	lanes: Map<ModelPlace, number>;
+	from: Set<ModelPlace>;
+	into: Map<ModelPlace, LanesInto>;
+} {
+	const [lanes, from, into] = [
+		new Map<ModelPlace, number>(),
+		new Set<ModelPlace>(),
+		new Map<ModelPlace, LanesInto>(),
+	];
+	for (const [i, { stackedIn, intoRow }] of routesOf(variant).entries()) {
 		if (!stackedIn) continue;
-		widths.set(stackedIn, (widths.get(stackedIn) ?? 0) + STACK_LANE * em);
+		lanes.set(stackedIn, (lanes.get(stackedIn) ?? 0) + STACK_LANE * em);
+		if (!intoRow) continue;
+		const { to } = variant.arrows[i];
+		from.add(stackedIn);
+		into.set(to, {
+			from: stackedIn,
+			lanes: (into.get(to)?.lanes ?? 0) + STACK_LANE * em,
+		});
 	}
-	return widths;
+	return { lanes, from, into };
+}
+
+/**
+ * Where the lanes of the stacked starts of a place into a place of a row below begin, `contents` the right of the
+ * contents of the first, `left` the left of the second: right of those contents, and at least SLOT_ROOM right of
+ * `left`, so that they all reach the top edge of that place, which widens to hold them.
+ */
+export function lanesFrom(contents: number, left: number, em: number): number {
+	return Math.max(contents, left + SLOT_ROOM * em);
 }
 
 /**
@@ -510,9 +548,9 @@ function exitsOf(variant: ModelVariant): Map<ModelAffordance, Exit> {
  * container shared by an arrow's affordance and its target, let `a'` and `t'` be the children that lead to them. When
  * `t'` immediately follows `a'`, the arrow reaches the top edge of a place on the top face of `t'` in a column (a row
  * shows all its places, and those of its rows), or the left edge of the leftmost place of `t'` in a row. It reaches the
- * right edge, through the corridor, in every other case. An arrow into the top edge of `t'` itself starts stacked when
- * `a'` is a place whose column does not end with its affordance, and would drop across what is below it: it takes a lane
- * of `a'`.
+ * right edge, through the corridor, in every other case. An arrow into a top edge starts stacked when `a'` is a place
+ * whose column does not end with its affordance, and would drop across what is below it: it takes a lane of `a'`, into
+ * `t'` or into a place of a row `t'`.
  */
 function routesOf(variant: ModelVariant): Route[] {
 	const lineages = new Map<ModelContent, ModelContent[]>();
@@ -548,8 +586,11 @@ function routesOf(variant: ModelVariant): Route[] {
 				.every((content) => position(content) === 0);
 			return { side: leftmost ? "left" : "right" };
 		}
-		const stacked = a.kind === "place" && t === to && bottomOf(a) !== from;
-		return { side: "top", ...(stacked && { stackedIn: a }) };
+		const stacked = a.kind === "place" && bottomOf(a) !== from;
+		return {
+			side: "top",
+			...(stacked && { stackedIn: a, intoRow: t !== to }),
+		};
 	});
 }
 
@@ -609,15 +650,16 @@ function anchorsOf(
 
 /**
  * Where each arrow of `variant`, from where it runs to its lane in `starts` (its start, or the end of its way out of a
- * hemmed place), reaches the side of its target its route gives it, in data
- * order. The arrows of stacked starts into one top edge reach it down their lanes, right of the contents of their place;
- * the other arrivals on it go at the `topSlots` left of those lanes. The arrivals on a left edge are at the heights of
- * their starts, as near as `levelHeights` allows. Those on a right edge go down every ARRIVAL_STEP from the middle of
- * the name's first line, or evenly down to LOW above the bottom corner of the frame when that would pass it. Those on
- * the right edge of a hemmed place go up instead from the bottom of its anchor in `anchors`, every ARRIVAL_STEP from
- * LOW above it, or evenly up to the middle of the name's first line; those into the places of the band of one row, all
- * together, as on one edge. They go to the arrows of the edge, or of the band, in an order that keeps them from
- * crossing before their heads. Each arrival is ENTRY_DEPTH inside the frame, past its edge.
+ * hemmed place), reaches the side of its target its route gives it, in data order. The arrows of stacked starts into
+ * one top edge reach it down their lanes, right of the contents of their place, and past `lanesFrom` the left of a
+ * place of a row below; the other arrivals on it go at the `topSlots` left of those lanes. The arrivals on a left edge
+ * are at the heights of their starts, as near as `levelHeights` allows. Those on a right edge go down every
+ * ARRIVAL_STEP from the middle of the name's first line, or evenly down to LOW above the bottom corner of the frame
+ * when that would pass it. Those on the right edge of a hemmed place go up instead from the bottom of its anchor in
+ * `anchors`, every ARRIVAL_STEP from LOW above it, or evenly up to the middle of the name's first line; those into the
+ * places of the band of one row, all together, as on one edge. They go to the arrows of the edge, or of the band, in
+ * an order that keeps them from crossing before their heads. Each arrival is ENTRY_DEPTH inside the frame, past its
+ * edge.
  */
 function spreadArrivals(
 	variant: ModelVariant,
@@ -668,10 +710,11 @@ function spreadArrivals(
 			/** The slots stop left of the lanes, if any. */
 			let slotsRight = frame.x + frame.width;
 			if (stacked.length > 0) {
-				const place = routes[stacked[0]].stackedIn as ModelPlace;
-				const contents = rightOf(place.contents, boxOf);
+				const { stackedIn, intoRow } = routes[stacked[0]];
+				const contents = rightOf((stackedIn as ModelPlace).contents, boxOf);
+				const first = intoRow ? lanesFrom(contents, frame.x, em) : contents;
 				const lanes = stacked.map(
-					(_, k) => contents + (k + 0.5) * STACK_LANE * em,
+					(_, k) => first + (k + 0.5) * STACK_LANE * em,
 				);
 				/**
 				 * Only the quarter turn into each lane: below it, the arrow runs straight down the lane, and
