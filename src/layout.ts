@@ -20,6 +20,8 @@ import type {
 	Theme,
 } from "./input.ts";
 
+export { crossings, type Warning } from "./arrows.ts";
+
 export type Point = { x: number; y: number };
 export type Box = { x: number; y: number; width: number; height: number };
 export type TextBlock = {

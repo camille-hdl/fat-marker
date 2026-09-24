@@ -1,11 +1,12 @@
 import { measure } from "./font.ts";
-import type {
-	ModelAffordance,
-	ModelArrow,
-	ModelContent,
-	ModelPlace,
-	ModelRow,
-	ModelVariant,
+import {
+	type ModelAffordance,
+	type ModelArrow,
+	type ModelContent,
+	type ModelPlace,
+	type ModelRow,
+	type ModelVariant,
+	show,
 } from "./input.ts";
 import type {
 	Box,
@@ -13,6 +14,7 @@ import type {
 	LaidAffordance,
 	LaidArrow,
 	LaidPlace,
+	Layout,
 	Point,
 	TextBlock,
 } from "./layout.ts";
@@ -1107,4 +1109,141 @@ function straight(from: Point, to: Point): Cubic {
 		{ x: to.x - third.x, y: to.y - third.y },
 		to,
 	];
+}
+
+/** An arrow that runs through a text: `field` is the arrow's `…to` or `…to[i]`. */
+export type Warning = { field: string; message: string };
+
+/**
+ * A text an arrow may run through: what kind it is, as a message words it, the element it belongs to, and its rank in
+ * document order.
+ */
+type Text = {
+	kind: "name" | "label" | "scribble";
+	text: string;
+	of: ModelPlace | ModelAffordance;
+	box: Box;
+	rank: number;
+};
+
+/** The texts of a variant from the highest top down, and the height of the tallest. */
+type TextsByTop = { texts: Text[]; tallest: number };
+
+/** How many straight steps each cubic of an arrow is flattened into, before looking for the texts it runs through. */
+const FLATTENING_STEPS = 32;
+
+/**
+ * The arrows of `laid` that run through a place's name, or an affordance's label or scribble, other than their own
+ * affordance's, in data order, then in document order of the texts. Frames and outlines do not count: an arrow's halo
+ * keeps them legible where it crosses them. Each cubic of an arrow is checked only against the texts of its variant
+ * whose height it reaches, so that a long sketch costs about as much per arrow as a short one.
+ */
+export function crossings(laid: Layout): Warning[] {
+	return laid.variants.flatMap(({ items, arrows }) => {
+		const byTop = textsByTop(items);
+		return arrows.flatMap(({ arrow, path }) => {
+			const crossed = new Set<Text>();
+			for (const cubic of path) {
+				const { bounds, points } = flatten(cubic);
+				for (const text of textsAcross(byTop, bounds)) {
+					if (text.of !== arrow.from && runsThrough(points, text.box)) {
+						crossed.add(text);
+					}
+				}
+			}
+			const name = show(`${arrow.from.text.text} → ${arrow.to.name.text}`);
+			return [...crossed]
+				.sort((one, other) => one.rank - other.rank)
+				.map(({ kind, text }) => ({
+					field: arrow.field,
+					message: `arrow ${name} crosses the ${kind} ${show(text)}`,
+				}));
+		});
+	});
+}
+
+function textsByTop(items: (LaidPlace | LaidAffordance)[]): TextsByTop {
+	const texts = items.map((item, rank): Text => {
+		if (item.kind === "place") {
+			const { place, name } = item;
+			return {
+				kind: "name",
+				text: place.name.text,
+				of: place,
+				box: name.box,
+				rank,
+			};
+		}
+		const { affordance, label, box } = item;
+		const text = affordance.text.text;
+		return label
+			? { kind: "label", text, of: affordance, box: label.box, rank }
+			: { kind: "scribble", text, of: affordance, box, rank };
+	});
+	texts.sort((one, other) => one.box.y - other.box.y);
+	const tallest = texts.reduce(
+		(most, { box }) => Math.max(most, box.height),
+		0,
+	);
+	return { texts, tallest };
+}
+
+/** The texts of `byTop` whose height `bounds` reaches: a slice of them, found by bisection. */
+function textsAcross({ texts, tallest }: TextsByTop, bounds: Box): Text[] {
+	let [low, high] = [0, texts.length];
+	while (low < high) {
+		const middle = (low + high) >> 1;
+		if (texts[middle].box.y + tallest <= bounds.y) low = middle + 1;
+		else high = middle;
+	}
+	const across: Text[] = [];
+	for (let i = low; i < texts.length; i++) {
+		const { box } = texts[i];
+		if (box.y >= bounds.y + bounds.height) break;
+		if (box.y + box.height > bounds.y) across.push(texts[i]);
+	}
+	return across;
+}
+
+/** A cubic as a polyline, and the box that holds it: that of its control points. */
+function flatten(cubic: Cubic): { bounds: Box; points: Point[] } {
+	const [xs, ys] = [cubic.map(({ x }) => x), cubic.map(({ y }) => y)];
+	const [left, top] = [Math.min(...xs), Math.min(...ys)];
+	return {
+		bounds: {
+			x: left,
+			y: top,
+			width: Math.max(...xs) - left,
+			height: Math.max(...ys) - top,
+		},
+		points: Array.from({ length: FLATTENING_STEPS + 1 }, (_, k) =>
+			pointAt(cubic, k / FLATTENING_STEPS),
+		),
+	};
+}
+
+/** Whether the polyline through `points` runs through the inside of `box`, not only along its edges. */
+function runsThrough(points: Point[], box: Box): boolean {
+	for (let i = 1; i < points.length; i++) {
+		if (segmentThrough(points[i - 1], points[i], box)) return true;
+	}
+	return false;
+}
+
+/** Whether the segment from `a` to `b` runs through the inside of `box`: Liang–Barsky clipping, strict. */
+function segmentThrough(a: Point, b: Point, box: Box): boolean {
+	const [dx, dy] = [b.x - a.x, b.y - a.y];
+	let [from, to] = [0, 1];
+	for (const [p, q] of [
+		[-dx, a.x - box.x],
+		[dx, box.x + box.width - a.x],
+		[-dy, a.y - box.y],
+		[dy, box.y + box.height - a.y],
+	]) {
+		if (p === 0) {
+			if (q <= 0) return false;
+		} else if (p < 0) from = Math.max(from, q / p);
+		else to = Math.min(to, q / p);
+	}
+	return from < to;
 }
