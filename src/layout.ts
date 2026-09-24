@@ -385,7 +385,13 @@ function measurePlace(
 	let width = Math.max(name.box.width, column.width + lanes) + 2 * padding;
 	const into = reserved.stacked.into.get(place);
 	if (into) {
-		const contentsRight = reserved.contentsRight.get(into.from) as number;
+		const contentsRight = reserved.contentsRight.get(into.from);
+		// the place the lanes start from is above this place's row, in the same column: the tree measures it first
+		if (contentsRight === undefined) {
+			throw new Error(
+				`internal: ${place.name.text} is measured before ${into.from.name.text}, whose lanes it holds`,
+			);
+		}
 		const lanesLeft = lanesFrom(contentsRight, left, em);
 		width = Math.max(width, lanesLeft + into.lanes + padding - left);
 	}
