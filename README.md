@@ -5,6 +5,8 @@
 Draws a fat marker sketch of UI directions, as in [Shape Up, chapter 4](https://basecamp.com/shapeup/1.3-chapter-04),
 from JSON to SVG or PNG.
 
+For agent use, the [fat-marker skill](https://github.com/camille-hdl/skills/tree/main/skills/fat-marker-sketch) teaches an agent how to use this package.
+
 ![Three fat marker sketches comparing ways to book a plot in a community garden](https://raw.githubusercontent.com/camille-hdl/fat-marker/main/docs/fat-marker.png)
 
 ## Quick start
