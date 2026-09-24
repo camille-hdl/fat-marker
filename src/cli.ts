@@ -5,11 +5,13 @@ import { readFile, writeFile } from "node:fs/promises";
 import { extname } from "node:path";
 import { getSystemErrorMessage, parseArgs } from "node:util";
 import {
+	checkSketch,
 	FatMarkerError,
 	renderPng,
 	renderSvg,
 	type Sketch,
 	type Theme,
+	type Warning,
 } from "./index.ts";
 import { escapeUnsafeToPrint } from "./input.ts";
 
@@ -71,7 +73,8 @@ Examples:
   cat sketch.json | fat-marker -o sketch.svg
 
 Exit codes:
-  0  success
+  0  success, even with warnings: each arrow that runs through a place's name or an
+     affordance's label is reported on stderr, "fat-marker: warning: <file>: <field>: …"
   1  invalid JSON, data or theme, an input over 1 MiB, or a PNG that cannot be drawn; the
      message names the file, and the field when there is one
   2  usage error, or a file that cannot be read or written
@@ -121,7 +124,7 @@ export async function run(args: string[], io: Io): Promise<number> {
 			themeSource === undefined
 				? undefined
 				: parseJson(await readFileText(themeSource), themeSource);
-		const image = await draw(
+		const { image, warnings } = await draw(
 			data,
 			source,
 			format,
@@ -129,6 +132,8 @@ export async function run(args: string[], io: Io): Promise<number> {
 		);
 		if (values.output === undefined) io.stdout.write(image);
 		else await writeOutput(values.output, image);
+		for (const { field, message } of warnings)
+			io.stderr.write(`fat-marker: warning: ${source}: ${field}: ${message}\n`);
 		return 0;
 	} catch (error) {
 		if (!(error instanceof Failure)) throw error;
@@ -260,20 +265,25 @@ function parseJson(json: string, source: string): unknown {
 	}
 }
 
-/** Draws `data` from `source`, reporting a theme error against the theme file when one was given. */
+/**
+ * Draws `data` from `source`, and checks it once drawn, reporting a theme error against the theme file when one was
+ * given.
+ */
 async function draw(
 	data: unknown,
 	source: string,
 	format: Format,
 	themeFile?: { theme: unknown; path: string },
-): Promise<string | Uint8Array> {
+): Promise<{ image: string | Uint8Array; warnings: Warning[] }> {
 	try {
 		// The public renderers validate JSON data and themes at runtime.
 		const sketch = data as Sketch;
 		const theme = themeFile?.theme as Partial<Theme> | undefined;
-		return format === "png"
-			? await renderPng(sketch, theme)
-			: renderSvg(sketch, theme);
+		const image =
+			format === "png"
+				? await renderPng(sketch, theme)
+				: renderSvg(sketch, theme);
+		return { image, warnings: checkSketch(sketch, theme) };
 	} catch (error) {
 		if (error instanceof FatMarkerError)
 			throw new Failure(
