@@ -1005,7 +1005,10 @@ const invariants: [string, (sketch: Sketch, laid: Layout) => void][] = [
 						unstretched.add(place);
 					}
 				}
-				/** The width of `content` before its column stretches it: a place fits its name, or its widest content and its lanes; rows and affordances never stretch. */
+				/**
+				 * The width of `content` before its column stretches it: a place fits its name, or its widest content and
+				 * its lanes; rows and affordances never stretch.
+				 */
 				const natural = (content: ModelContent): number => {
 					if (content.kind !== "place") return boxOf(content).width;
 					const name = places.get(content)?.name;

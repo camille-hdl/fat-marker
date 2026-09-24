@@ -371,10 +371,8 @@ function measurePlace(
 		measureContent(content, em, reserved),
 	);
 	const column = columnSize(contents, em);
-	const [lanes, padding] = [
-		reserved.stacked.lanes.get(place) ?? 0,
-		PLACE_PADDING * em,
-	];
+	const lanes = reserved.stacked.lanes.get(place) ?? 0;
+	const padding = PLACE_PADDING * em;
 	const size = PLACE_NAME_SIZE * em;
 	const lines = wrap(place.name.text, nameWrap(column.width, em), 700, size);
 	const name = textBlock(lines, 700, size, "start", 0, 0, place.name.field);
