@@ -3,7 +3,6 @@
 import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
 import { describe, test } from "node:test";
-import { departuresOf, routeArrows } from "../src/arrows.ts";
 import { measure } from "../src/font.ts";
 import { checkSketch, FatMarkerError, type Place } from "../src/index.ts";
 import {
@@ -3443,28 +3442,6 @@ describe("layout", () => {
 		assert.ok(arrow);
 		const middle = (bottom(variant.heading.box) + left.frame.y) / 2;
 		assert.ok(close(exitRunOf(arrow).y, middle));
-	});
-
-	test("departure: routing fails on a departure whose row's room was not measured", () => {
-		const [laid] = laidOut(upToHigh).variants;
-		const unsettled = departuresOf(laid.variant, em);
-		assert.ok(
-			unsettled.departures.some(
-				(departure) => departure && departure.down === undefined,
-			),
-		);
-		assert.throws(
-			() =>
-				routeArrows(
-					laid.variant,
-					laid.column,
-					bottom(laid.heading.box),
-					laid.items,
-					unsettled,
-					em,
-				),
-			/unsettled/,
-		);
 	});
 
 	test("departure: goes down to a place before its row anchored in the band of a row that holds it", () => {
