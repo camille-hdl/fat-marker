@@ -51,10 +51,19 @@ async function runCliBytes(
 		stderr: new PassThrough(),
 	};
 	io.stdin.end(stdin);
+	// Every chunk, past the streams' buffers: a large sketch may print many warnings.
+	const collect = (stream: PassThrough): Buffer[] => {
+		const chunks: Buffer[] = [];
+		stream.on("data", (chunk: Buffer) => chunks.push(chunk));
+		return chunks;
+	};
+	const [stdout, stderr] = [collect(io.stdout), collect(io.stderr)];
 	const code = await run(args, io);
-	const read = (stream: PassThrough): Buffer =>
-		stream.read() ?? Buffer.alloc(0);
-	return { code, stdout: read(io.stdout), stderr: read(io.stderr) };
+	return {
+		code,
+		stdout: Buffer.concat(stdout),
+		stderr: Buffer.concat(stderr),
+	};
 }
 
 /** Runs the CLI with fake streams, `stdin` holding the given text, and returns what it wrote as text. */
@@ -521,6 +530,41 @@ describe("run, on warnings", () => {
 		assert.deepEqual({ code, stdout }, { code: 0, stdout: "" });
 		assert.match(stderr, /^fat-marker: warning: <stdin>: [^\n]*"Label"\n$/);
 		assert.ok(existsSync(output));
+	});
+
+	test("warns after drawing half a mebibyte of arrows through a row of buttons, three per arrow at most", async () => {
+		const json = JSON.stringify({
+			variants: [
+				{
+					variant: "A",
+					contains: [
+						{
+							place: "P",
+							contains: [
+								{
+									row: Array.from({ length: 16000 }, (_, i) => ({
+										affordance: `B${i}`,
+										to: "Far",
+									})),
+								},
+							],
+						},
+						{ place: "Middle" },
+						{ place: "Far" },
+					],
+				},
+			],
+		});
+		assert.ok(json.length > 512 * 1024);
+		const { code, stdout, stderr } = await runCli([], json);
+		assert.equal(code, 0);
+		assert.ok(stdout === renderSvg(JSON.parse(json)), "the same SVG");
+		const lines = stderr.split("\n").slice(0, -1);
+		assert.ok(lines.length > 3 * 15000 && lines.length <= 3 * 16000);
+		assert.match(
+			lines[0],
+			/^fat-marker: warning: <stdin>: [^:]+: arrow "B0 → Far"/,
+		);
 	});
 });
 

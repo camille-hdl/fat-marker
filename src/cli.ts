@@ -11,7 +11,6 @@ import {
 	renderSvg,
 	type Sketch,
 	type Theme,
-	type Warning,
 } from "./index.ts";
 import { escapeUnsafeToPrint } from "./input.ts";
 
@@ -124,14 +123,18 @@ export async function run(args: string[], io: Io): Promise<number> {
 			themeSource === undefined
 				? undefined
 				: parseJson(await readFileText(themeSource), themeSource);
-		const { image, warnings } = await draw(
+		const themeFile =
+			themeSource === undefined ? undefined : { theme, path: themeSource };
+		const image = await callOnFiles<string | Uint8Array>(
 			data,
 			source,
-			format,
-			themeSource === undefined ? undefined : { theme, path: themeSource },
+			themeFile,
+			format === "png" ? renderPng : renderSvg,
 		);
 		if (values.output === undefined) io.stdout.write(image);
 		else await writeOutput(values.output, image);
+		// Once the image is written: a failing check must not cost it.
+		const warnings = await callOnFiles(data, source, themeFile, checkSketch);
 		for (const { field, message } of warnings)
 			io.stderr.write(`fat-marker: warning: ${source}: ${field}: ${message}\n`);
 		return 0;
@@ -266,24 +269,21 @@ function parseJson(json: string, source: string): unknown {
 }
 
 /**
- * Draws `data` from `source`, and checks it once drawn, reporting a theme error against the theme file when one was
- * given.
+ * Calls `use`, a public function, on `data` read from `source` and on the theme read from its file, reporting a theme
+ * error against the theme file when one was given.
  */
-async function draw(
+async function callOnFiles<T>(
 	data: unknown,
 	source: string,
-	format: Format,
-	themeFile?: { theme: unknown; path: string },
-): Promise<{ image: string | Uint8Array; warnings: Warning[] }> {
+	themeFile: { theme: unknown; path: string } | undefined,
+	use: (sketch: Sketch, theme?: Partial<Theme>) => T | Promise<T>,
+): Promise<T> {
 	try {
-		// The public renderers validate JSON data and themes at runtime.
-		const sketch = data as Sketch;
-		const theme = themeFile?.theme as Partial<Theme> | undefined;
-		const image =
-			format === "png"
-				? await renderPng(sketch, theme)
-				: renderSvg(sketch, theme);
-		return { image, warnings: checkSketch(sketch, theme) };
+		// The public functions validate JSON data and themes at runtime.
+		return await use(
+			data as Sketch,
+			themeFile?.theme as Partial<Theme> | undefined,
+		);
 	} catch (error) {
 		if (error instanceof FatMarkerError)
 			throw new Failure(

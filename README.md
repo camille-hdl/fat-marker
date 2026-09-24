@@ -95,8 +95,9 @@ to write a file; its `.svg` or `.png` extension selects the format. `--format` s
 terminal is refused. Input files, stdin and theme files are limited to 1 MiB. Exit code 0 means success, 1 means invalid
 JSON, data or theme, an input over 1 MiB, or a PNG that cannot be drawn; 2 means a usage or file access error.
 
-After drawing, the command reports on stderr each arrow that runs through a place's name or an affordance's label or
-scribble, as `checkSketch` finds them (see API), one line each. Warnings do not change the exit code:
+Once the image is written, the command reports on stderr each arrow that runs through a place's name or an
+affordance's label or scribble, as `checkSketch` finds them (see API), one line each. Warnings do not change the exit
+code:
 
 ```text
 fat-marker: warning: sketch.json: variants[0].contains[0].contains[0].row[0].to: arrow "Go → Far" crosses the label "Label"
