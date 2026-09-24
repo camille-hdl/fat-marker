@@ -103,8 +103,8 @@ code:
 fat-marker: warning: sketch.json: variants[0].contains[0].contains[0].row[0].to: arrow "Go → Far" crosses the label "Label"
 ```
 
-The field is the arrow's `to`. Rearrange the data to clear it: set the target place beside its button in a row, or put
-the place that holds the label elsewhere.
+The field is the arrow's `to`. To clear it, set the target place beside the affordance's place in a row, put the
+affordance last in its row, or move the crossed element, then render again.
 
 ```sh
 npx @camille-hdl/fat-marker sketch.json > sketch.svg
@@ -186,7 +186,7 @@ try {
 `renderSvg(sketch, theme?)` returns a string; `renderPng(sketch, theme?)`, a `Promise<Uint8Array>`. `theme` is a partial
 theme, as in the Theme section. The package is ESM only.
 
-Both functions validate data and themes and throw `FatMarkerError` on invalid input; its `field` gives the field path.
+The three functions validate data and themes and throw `FatMarkerError` on invalid input; its `field` gives the field path.
 `renderSvg` is synchronous and linear in the number of elements, so a very large sketch blocks the event loop.
 `renderPng` is asynchronous: a usual sketch takes about 120–150 ms, and a sketch at the size limit can take up to 7.4 s.
 The API reads no files and has no input size limit; set a limit before parsing untrusted input. The package exports the
