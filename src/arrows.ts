@@ -1155,7 +1155,7 @@ const MOST_CROSSED = 3;
  */
 export function crossings(laid: Layout): Warning[] {
 	return laid.variants.flatMap(({ items, arrows }) => {
-		const grid = fileTexts(items);
+		const grid = textGrid(items);
 		return arrows.flatMap(({ arrow, path }) => {
 			const name = show(`${arrow.from.text.text} → ${arrow.to.name.text}`);
 			return firstCrossed(path, grid, arrow.from)
@@ -1209,7 +1209,7 @@ function enteredIn(grid: TextGrid, { a, b, from, to }: Step): CrossableText[] {
 		.map(({ text }) => text);
 }
 
-function fileTexts(items: (LaidPlace | LaidAffordance)[]): TextGrid {
+function textGrid(items: (LaidPlace | LaidAffordance)[]): TextGrid {
 	const texts = items.map((item, rank): CrossableText => {
 		if (item.kind === "place") {
 			const { place, name } = item;

@@ -104,7 +104,7 @@ fat-marker: warning: sketch.json: variants[0].contains[0].contains[0].row[0].to:
 ```
 
 The field is the arrow's `to`. To clear it, set the target place beside the affordance's place in a row, put the
-affordance last in its row, or move the crossed element, then render again.
+affordance last in its row, or move the place or affordance it crosses, then render again.
 
 ```sh
 npx @camille-hdl/fat-marker sketch.json > sketch.svg
