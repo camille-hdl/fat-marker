@@ -1,0 +1,40 @@
+{
+	"variants": [
+		{
+			"variant": "A",
+			"contains": [
+				{ "place": "Home" },
+				{ "place": "Map" },
+				{
+					"row": [
+						{
+							"place": "Beds",
+							"contains": [
+								{ "affordance": "Back home", "to": "Home" },
+								{ "affordance": "See the map", "to": "Map" },
+								{ "affordance": "Order seeds", "to": "Seeds" }
+							]
+						},
+						{
+							"place": "Paths",
+							"contains": [
+								{ "affordance": "Gravel", "read": true },
+								{ "affordance": "Back to the map", "to": "Map" },
+								{ "affordance": "Order gravel", "to": "Seeds" }
+							]
+						},
+						{
+							"place": "Shed",
+							"contains": [
+								{ "affordance": "Opening hours", "read": true },
+								{ "affordance": "Where the key is", "read": true }
+							]
+						}
+					]
+				},
+				{ "place": "Tools" },
+				{ "place": "Seeds" }
+			]
+		}
+	]
+}
