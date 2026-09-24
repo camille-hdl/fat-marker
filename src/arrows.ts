@@ -1,11 +1,12 @@
 import { measure } from "./font.ts";
-import type {
-	ModelAffordance,
-	ModelArrow,
-	ModelContent,
-	ModelPlace,
-	ModelRow,
-	ModelVariant,
+import {
+	type ModelAffordance,
+	type ModelArrow,
+	type ModelContent,
+	type ModelPlace,
+	type ModelRow,
+	type ModelVariant,
+	show,
 } from "./input.ts";
 import type {
 	Box,
@@ -13,6 +14,7 @@ import type {
 	LaidAffordance,
 	LaidArrow,
 	LaidPlace,
+	Layout,
 	Point,
 	TextBlock,
 } from "./layout.ts";
@@ -1107,4 +1109,254 @@ function straight(from: Point, to: Point): Cubic {
 		{ x: to.x - third.x, y: to.y - third.y },
 		to,
 	];
+}
+
+/** An arrow that runs through a text: `field` is the arrow's `…to` or `…to[i]`. */
+export type Warning = { field: string; message: string };
+
+/**
+ * A text an arrow may run through: what kind it is, as a message words it, the element it belongs to, and its rank in
+ * document order.
+ */
+type CrossableText = {
+	kind: "name" | "label" | "scribble";
+	text: string;
+	of: ModelPlace | ModelAffordance;
+	box: Box;
+	rank: number;
+};
+
+/**
+ * The texts of a variant filed in square cells as high as its shortest text, each in every cell its box meets, so that
+ * a step of an arrow is tried only against the texts beside it. `bounds` holds every text; cells are keyed by
+ * `row * columns + column`, counted from the top left corner of `bounds`.
+ */
+type TextGrid = {
+	cells: Map<number, CrossableText[]>;
+	bounds: Box;
+	side: number;
+	columns: number;
+};
+
+/** How many straight steps each cubic of an arrow is flattened into, before looking for the texts it runs through. */
+const FLATTENING_STEPS = 32;
+
+/**
+ * The most texts reported for one arrow, the first it runs through: enough to move the arrow or what it crosses, and
+ * a bound on the work an arrow along a long row of buttons costs.
+ */
+const MOST_CROSSED = 3;
+
+/**
+ * The arrows of `laid` that run through a place's name, or an affordance's label or scribble, other than their own
+ * affordance's, in data order, then in document order of the texts: for each arrow, the first MOST_CROSSED texts along
+ * its path. Frames and outlines do not count: an arrow's halo keeps them legible where it crosses them. Each step of an
+ * arrow is tried only against the texts beside it, so that a long sketch costs about as much per arrow as a short one.
+ */
+export function crossings(laid: Layout): Warning[] {
+	return laid.variants.flatMap(({ items, arrows }) => {
+		const grid = textGrid(items);
+		return arrows.flatMap(({ arrow, path }) => {
+			const name = show(`${arrow.from.text.text} → ${arrow.to.name.text}`);
+			return firstCrossed(path, grid, arrow.from)
+				.sort((one, other) => one.rank - other.rank)
+				.map(({ kind, text }) => ({
+					field: arrow.field,
+					message: `arrow ${name} crosses the ${kind} ${show(text)}`,
+				}));
+		});
+	});
+}
+
+/**
+ * The first texts of `grid` that `path` runs through, other than `own`'s, in the order it enters them: MOST_CROSSED at
+ * most.
+ */
+function firstCrossed(
+	path: Cubic[],
+	grid: TextGrid,
+	own: ModelAffordance,
+): CrossableText[] {
+	const crossed: CrossableText[] = [];
+	for (const step of stepsAlong(path, grid)) {
+		for (const text of enteredIn(grid, step)) {
+			if (text.of === own || crossed.includes(text)) continue;
+			crossed.push(text);
+			if (crossed.length === MOST_CROSSED) return crossed;
+		}
+	}
+	return crossed;
+}
+
+/**
+ * A stretch of a straight segment from `a` to `b` of a flattened arrow, between the fractions `from` and `to` of its
+ * length.
+ */
+type Step = { a: Point; b: Point; from: number; to: number };
+
+/**
+ * The texts of `grid` beside `step` that its segment enters before the step ends, in the order it enters them, those
+ * it entered in an earlier step included. The whole segment is clipped, not the step, so that a step's rounded ends do
+ * not put it inside a text it only runs along.
+ */
+function enteredIn(grid: TextGrid, { a, b, from, to }: Step): CrossableText[] {
+	return [...textsBeside(grid, along(a, b, from), along(a, b, to))]
+		.flatMap((text) => {
+			const at = clip(a, b, text.box)?.[0];
+			return at !== undefined && at < to ? [{ text, at }] : [];
+		})
+		.sort((one, other) => one.at - other.at)
+		.map(({ text }) => text);
+}
+
+function textGrid(items: (LaidPlace | LaidAffordance)[]): TextGrid {
+	const texts = items.map((item, rank): CrossableText => {
+		if (item.kind === "place") {
+			const { place, name } = item;
+			return {
+				kind: "name",
+				text: place.name.text,
+				of: place,
+				box: name.box,
+				rank,
+			};
+		}
+		const { affordance, label, box } = item;
+		const text = affordance.text.text;
+		return label
+			? { kind: "label", text, of: affordance, box: label.box, rank }
+			: { kind: "scribble", text, of: affordance, box, rank };
+	});
+	let [left, top, right, bottom, side] = [
+		Infinity,
+		Infinity,
+		-Infinity,
+		-Infinity,
+		Infinity,
+	];
+	for (const { box } of texts) {
+		left = Math.min(left, box.x);
+		top = Math.min(top, box.y);
+		right = Math.max(right, box.x + box.width);
+		bottom = Math.max(bottom, box.y + box.height);
+		side = Math.min(side, box.height);
+	}
+	const bounds = { x: left, y: top, width: right - left, height: bottom - top };
+	const grid: TextGrid = {
+		cells: new Map(),
+		bounds,
+		side,
+		columns: Math.floor(bounds.width / side) + 1,
+	};
+	for (const text of texts) {
+		for (const key of cellsMeeting(grid, text.box)) {
+			const cell = grid.cells.get(key);
+			if (cell) cell.push(text);
+			else grid.cells.set(key, [text]);
+		}
+	}
+	return grid;
+}
+
+/** The texts of `grid` in the cells that the box of the segment from `a` to `b` meets, each once. */
+function textsBeside(grid: TextGrid, a: Point, b: Point): Set<CrossableText> {
+	const [left, top] = [Math.min(a.x, b.x), Math.min(a.y, b.y)];
+	const box = {
+		x: left,
+		y: top,
+		width: Math.max(a.x, b.x) - left,
+		height: Math.max(a.y, b.y) - top,
+	};
+	const beside = new Set<CrossableText>();
+	for (const key of cellsMeeting(grid, box)) {
+		for (const text of grid.cells.get(key) ?? []) beside.add(text);
+	}
+	return beside;
+}
+
+/** The keys of the cells of `grid` that `box`, within the grid's bounds, meets. */
+function cellsMeeting({ bounds, side, columns }: TextGrid, box: Box): number[] {
+	// Clamped, for a box that rounding puts a hair outside the bounds.
+	const cell = (at: number, from: number, length: number) =>
+		Math.floor((Math.min(Math.max(at, from), from + length) - from) / side);
+	const keys: number[] = [];
+	const [first, last] = [
+		cell(box.x, bounds.x, bounds.width),
+		cell(box.x + box.width, bounds.x, bounds.width),
+	];
+	const [top, bottom] = [
+		cell(box.y, bounds.y, bounds.height),
+		cell(box.y + box.height, bounds.y, bounds.height),
+	];
+	for (let row = top; row <= bottom; row++) {
+		for (let column = first; column <= last; column++)
+			keys.push(row * columns + column);
+	}
+	return keys;
+}
+
+/**
+ * A cubic as a polyline, kept within the box of its control points, which holds the curve: rounding would otherwise
+ * put a straight cubic along a text's edge a hair inside it.
+ */
+function flatten(cubic: Cubic): Point[] {
+	const [xs, ys] = [cubic.map(({ x }) => x), cubic.map(({ y }) => y)];
+	const [left, right] = [Math.min(...xs), Math.max(...xs)];
+	const [top, bottom] = [Math.min(...ys), Math.max(...ys)];
+	return Array.from({ length: FLATTENING_STEPS + 1 }, (_, k) => {
+		const { x, y } = pointAt(cubic, k / FLATTENING_STEPS);
+		return {
+			x: Math.min(Math.max(x, left), right),
+			y: Math.min(Math.max(y, top), bottom),
+		};
+	});
+}
+
+/**
+ * The steps of `path` flattened, in order, no longer than a cell of `grid`, and only where it runs within the grid's
+ * bounds. Lazy: an arrow along a row of buttons tries the texts one cell after another, and stops at the first ones it
+ * runs through.
+ */
+function* stepsAlong(path: Cubic[], grid: TextGrid): Generator<Step> {
+	for (const cubic of path) {
+		const points = flatten(cubic);
+		for (let i = 1; i < points.length; i++) {
+			const [a, b] = [points[i - 1], points[i]];
+			const within = clip(a, b, grid.bounds);
+			if (!within) continue;
+			const [start, end] = within;
+			const length = Math.hypot(b.x - a.x, b.y - a.y) * (end - start);
+			const count = Math.ceil(length / grid.side);
+			const cut = (k: number) =>
+				k === count ? end : start + ((end - start) * k) / count;
+			for (let k = 0; k < count; k++)
+				yield { a, b, from: cut(k), to: cut(k + 1) };
+		}
+	}
+}
+
+/** The point at the fraction `t` of the segment from `a` to `b`. */
+function along(a: Point, b: Point, t: number): Point {
+	return t === 1 ? b : { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t };
+}
+
+/**
+ * Where the segment from `a` to `b` enters and leaves the inside of `box`, as fractions of its length: Liang–Barsky
+ * clipping, strict. Undefined when it misses the inside, running only along an edge or through a corner.
+ */
+function clip(a: Point, b: Point, box: Box): [number, number] | undefined {
+	const [dx, dy] = [b.x - a.x, b.y - a.y];
+	let [from, to] = [0, 1];
+	for (const [p, q] of [
+		[-dx, a.x - box.x],
+		[dx, box.x + box.width - a.x],
+		[-dy, a.y - box.y],
+		[dy, box.y + box.height - a.y],
+	]) {
+		if (p === 0) {
+			if (q <= 0) return undefined;
+		} else if (p < 0) from = Math.max(from, q / p);
+		else to = Math.min(to, q / p);
+	}
+	return from < to ? [from, to] : undefined;
 }

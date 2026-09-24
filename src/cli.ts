@@ -1,10 +1,11 @@
 // from @camille-hdl/hill-chart@0.2.0, 738a559
-// adapted: renamed for fat-marker (FatMarkerError, name, messages); SVG only, without --format nor PNG; provisional help; the input limit's comment rewritten
+// adapted: renamed for fat-marker (FatMarkerError, name, messages); SVG only, without --format nor PNG; provisional help; the input limit's comment rewritten; warnings on stderr, new
 import { createReadStream } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
 import { extname } from "node:path";
 import { getSystemErrorMessage, parseArgs } from "node:util";
 import {
+	checkSketch,
 	FatMarkerError,
 	renderPng,
 	renderSvg,
@@ -71,7 +72,8 @@ Examples:
   cat sketch.json | fat-marker -o sketch.svg
 
 Exit codes:
-  0  success
+  0  success, even with warnings: each arrow that runs through a name, a label or a
+     scribble is reported on stderr, "fat-marker: warning: <file>: <field>: …"
   1  invalid JSON, data or theme, an input over 1 MiB, or a PNG that cannot be drawn; the
      message names the file, and the field when there is one
   2  usage error, or a file that cannot be read or written
@@ -121,14 +123,20 @@ export async function run(args: string[], io: Io): Promise<number> {
 			themeSource === undefined
 				? undefined
 				: parseJson(await readFileText(themeSource), themeSource);
-		const image = await draw(
+		const themeFile =
+			themeSource === undefined ? undefined : { theme, path: themeSource };
+		const image = await callOnFiles<string | Uint8Array>(
 			data,
 			source,
-			format,
-			themeSource === undefined ? undefined : { theme, path: themeSource },
+			themeFile,
+			format === "png" ? renderPng : renderSvg,
 		);
 		if (values.output === undefined) io.stdout.write(image);
 		else await writeOutput(values.output, image);
+		// Once the image is written: a failing check must not cost it.
+		const warnings = await callOnFiles(data, source, themeFile, checkSketch);
+		for (const { field, message } of warnings)
+			io.stderr.write(`fat-marker: warning: ${source}: ${field}: ${message}\n`);
 		return 0;
 	} catch (error) {
 		if (!(error instanceof Failure)) throw error;
@@ -260,20 +268,22 @@ function parseJson(json: string, source: string): unknown {
 	}
 }
 
-/** Draws `data` from `source`, reporting a theme error against the theme file when one was given. */
-async function draw(
+/**
+ * Calls `use`, a public function, on `data` read from `source` and on the theme read from its file, reporting a theme
+ * error against the theme file when one was given.
+ */
+async function callOnFiles<T>(
 	data: unknown,
 	source: string,
-	format: Format,
-	themeFile?: { theme: unknown; path: string },
-): Promise<string | Uint8Array> {
+	themeFile: { theme: unknown; path: string } | undefined,
+	use: (sketch: Sketch, theme?: Partial<Theme>) => T | Promise<T>,
+): Promise<T> {
 	try {
-		// The public renderers validate JSON data and themes at runtime.
-		const sketch = data as Sketch;
-		const theme = themeFile?.theme as Partial<Theme> | undefined;
-		return format === "png"
-			? await renderPng(sketch, theme)
-			: renderSvg(sketch, theme);
+		// The public functions validate JSON data and themes at runtime.
+		return await use(
+			data as Sketch,
+			themeFile?.theme as Partial<Theme> | undefined,
+		);
 	} catch (error) {
 		if (error instanceof FatMarkerError)
 			throw new Failure(

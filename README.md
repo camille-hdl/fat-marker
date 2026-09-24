@@ -95,6 +95,17 @@ to write a file; its `.svg` or `.png` extension selects the format. `--format` s
 terminal is refused. Input files, stdin and theme files are limited to 1 MiB. Exit code 0 means success, 1 means invalid
 JSON, data or theme, an input over 1 MiB, or a PNG that cannot be drawn; 2 means a usage or file access error.
 
+Once the image is written, the command reports on stderr each arrow that runs through a place's name or an
+affordance's label or scribble, as `checkSketch` finds them (see API), one line each. Warnings do not change the exit
+code:
+
+```text
+fat-marker: warning: sketch.json: variants[0].contains[0].contains[0].row[0].to: arrow "Go → Far" crosses the label "Label"
+```
+
+The field is the arrow's `to`. To clear it, set the target place beside the affordance's place in a row, put the
+affordance last in its row, or move the place or affordance it crosses, then render again.
+
 ```sh
 npx @camille-hdl/fat-marker sketch.json > sketch.svg
 npx @camille-hdl/fat-marker sketch.json -o sketch.png
@@ -143,6 +154,7 @@ Install the package in a project with `npm install @camille-hdl/fat-marker`:
 ```js
 import { writeFile } from "node:fs/promises";
 import {
+  checkSketch,
   FatMarkerError,
   renderPng,
   renderSvg,
@@ -161,6 +173,8 @@ const png = await renderPng(sketch, { seed: 7 }); // Promise<Uint8Array>
 await writeFile("sketch.svg", svg);
 await writeFile("sketch.png", png);
 
+for (const { field, message } of checkSketch(sketch)) console.warn(`${field}: ${message}`);
+
 try {
   renderSvg({ variants: [] });
 } catch (error) {
@@ -172,11 +186,24 @@ try {
 `renderSvg(sketch, theme?)` returns a string; `renderPng(sketch, theme?)`, a `Promise<Uint8Array>`. `theme` is a partial
 theme, as in the Theme section. The package is ESM only.
 
-Both functions validate data and themes and throw `FatMarkerError` on invalid input; its `field` gives the field path.
+The three functions validate data and themes and throw `FatMarkerError` on invalid input; its `field` gives the field path.
 `renderSvg` is synchronous and linear in the number of elements, so a very large sketch blocks the event loop.
 `renderPng` is asynchronous: a usual sketch takes about 120–150 ms, and a sketch at the size limit can take up to 7.4 s.
 The API reads no files and has no input size limit; set a limit before parsing untrusted input. The package exports the
-`Sketch`, `Variant`, `Place`, `Affordance`, `Row` and `Theme` types.
+`Sketch`, `Variant`, `Place`, `Affordance`, `Row`, `Theme` and `Warning` types.
+
+`checkSketch(sketch, theme?)` returns a `Warning[]`: one `{ field, message }` for each text an arrow runs through, a
+place's name or an affordance's label or scribble, other than the arrow's own affordance's. An arrow gets three warnings
+at most, for the first texts along its path: enough to move it or what it crosses. It lays the sketch out as `renderSvg`
+does, draws nothing, and throws the same `FatMarkerError` on invalid input. It is synchronous, and takes about half a
+second at the CLI's 1 MiB limit. An arrow may cross frames and outlines, which its halo keeps legible; those are not
+reported. For the sketch where `Go` sits in a row beside `Label`, and its target `Far` is further down:
+
+```js
+checkSketch(sketch);
+// [{ field: "variants[0].contains[0].contains[0].row[0].to",
+//    message: 'arrow "Go → Far" crosses the label "Label"' }]
+```
 
 ## Determinism
 

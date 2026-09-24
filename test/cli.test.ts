@@ -51,10 +51,19 @@ async function runCliBytes(
 		stderr: new PassThrough(),
 	};
 	io.stdin.end(stdin);
+	// Every chunk, past the streams' buffers: a large sketch may print many warnings.
+	const collect = (stream: PassThrough): Buffer[] => {
+		const chunks: Buffer[] = [];
+		stream.on("data", (chunk: Buffer) => chunks.push(chunk));
+		return chunks;
+	};
+	const [stdout, stderr] = [collect(io.stdout), collect(io.stderr)];
 	const code = await run(args, io);
-	const read = (stream: PassThrough): Buffer =>
-		stream.read() ?? Buffer.alloc(0);
-	return { code, stdout: read(io.stdout), stderr: read(io.stderr) };
+	return {
+		code,
+		stdout: Buffer.concat(stdout),
+		stderr: Buffer.concat(stderr),
+	};
 }
 
 /** Runs the CLI with fake streams, `stdin` holding the given text, and returns what it wrote as text. */
@@ -468,6 +477,97 @@ describe("run", () => {
 	});
 });
 
+/** A button whose arrow runs right to the corridor through the label beside it, to a place further down. */
+function crossingJson(label: string): string {
+	return JSON.stringify({
+		variants: [
+			{
+				variant: "A",
+				contains: [
+					{
+						place: "P",
+						contains: [
+							{ row: [{ affordance: "Go", to: "Far" }, { affordance: label }] },
+						],
+					},
+					{ place: "Middle" },
+					{ place: "Far" },
+				],
+			},
+		],
+	});
+}
+
+describe("run, on warnings", () => {
+	test("warns on stderr of an arrow through a label, and exits 0 with the same SVG", async () => {
+		const json = crossingJson("Label");
+		const path = tempFile("crossing.json", json);
+		assert.deepEqual(await runCli([path]), {
+			code: 0,
+			stdout: renderSvg(JSON.parse(json)),
+			stderr: `fat-marker: warning: ${path}: variants[0].contains[0].contains[0].row[0].to: arrow "Go → Far" crosses the label "Label"\n`,
+		});
+	});
+
+	test("warns from stdin with the characters unsafe to print escaped", async () => {
+		const { code, stderr } = await runCli([], crossingJson("Label\u202e"));
+		assert.deepEqual(
+			{ code, stderr },
+			{
+				code: 0,
+				stderr:
+					'fat-marker: warning: <stdin>: variants[0].contains[0].contains[0].row[0].to: arrow "Go → Far" crosses the label "Label\\u202e"\n',
+			},
+		);
+	});
+
+	test("warns after writing a PNG", async () => {
+		const output = join(dir, "crossing.png");
+		const { code, stdout, stderr } = await runCli(
+			["-o", output],
+			crossingJson("Label"),
+		);
+		assert.deepEqual({ code, stdout }, { code: 0, stdout: "" });
+		assert.match(stderr, /^fat-marker: warning: <stdin>: [^\n]*"Label"\n$/);
+		assert.ok(existsSync(output));
+	});
+
+	test("warns after drawing half a mebibyte of arrows through a row of buttons, three per arrow at most", async () => {
+		const json = JSON.stringify({
+			variants: [
+				{
+					variant: "A",
+					contains: [
+						{
+							place: "P",
+							contains: [
+								{
+									row: Array.from({ length: 16000 }, (_, i) => ({
+										affordance: `B${i}`,
+										to: "Far",
+									})),
+								},
+							],
+						},
+						{ place: "Middle" },
+						{ place: "Far" },
+					],
+				},
+			],
+		});
+		assert.ok(json.length > 512 * 1024);
+		const { code, stdout, stderr } = await runCli([], json);
+		assert.equal(code, 0);
+		assert.ok(stdout === renderSvg(JSON.parse(json)), "the same SVG");
+		const lines = stderr.split("\n").slice(0, -1);
+		assert.ok(lines.length > 3 * 15000 && lines.length <= 3 * 16000);
+		assert.match(
+			lines[0],
+			/^fat-marker: warning: <stdin>: [^:]+: arrow "B0 → Far"/,
+		);
+	});
+});
+
 describe("run, on help, version and usage errors", () => {
 	test("documents every data key and mark in help", async () => {
 		const { stdout } = await runCli(["--help"]);
@@ -501,6 +601,13 @@ describe("run, on help, version and usage errors", () => {
 		}
 	});
 
+	test("says in help that warnings go to stderr, the exit code unchanged", async () => {
+		const { stdout } = await runCli(["--help"]);
+		const codes = stdout.slice(stdout.indexOf("\nExit codes:\n"));
+		assert.match(codes, /warning/);
+		assert.match(codes, /stderr/);
+	});
+
 	test("renders the JSON example shown in help", async () => {
 		const { stdout } = await runCli(["--help"]);
 		const match = stdout.match(/\nExample:\n((?: {2}.*\n)+)\nA PNG/);
@@ -529,7 +636,7 @@ describe("run, on help, version and usage errors", () => {
 			}
 			assert.match(
 				stdout,
-				/\nExit codes:\n {2}0 {2}success\n {2}1 {2}[\s\S]*\n {2}2 {2}usage error, or a file that cannot be read or written\n$/,
+				/\nExit codes:\n {2}0 {2}success.*\n(?: {5}.*\n)* {2}1 {2}[\s\S]*\n {2}2 {2}usage error, or a file that cannot be read or written\n$/,
 			);
 			assert.match(stdout, /1 {2}invalid JSON, data or theme/);
 		});

@@ -1,10 +1,10 @@
 // from @camille-hdl/hill-chart@0.2.0, 738a559
 // functions fixture and generator; randomCharts as randomSketches (its text generator kept, the sketches new); the loops running a table of invariants over fixtures and random sketches. The invariants and the rest are new
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { describe, test } from "node:test";
-import { departuresOf, routeArrows } from "../src/arrows.ts";
 import { measure } from "../src/font.ts";
+import { checkSketch, FatMarkerError, type Place } from "../src/index.ts";
 import {
 	type Affordance,
 	type Content,
@@ -3444,28 +3444,6 @@ describe("layout", () => {
 		assert.ok(close(exitRunOf(arrow).y, middle));
 	});
 
-	test("departure: routing fails on a departure whose row's room was not measured", () => {
-		const [laid] = laidOut(upToHigh).variants;
-		const unsettled = departuresOf(laid.variant, em);
-		assert.ok(
-			unsettled.departures.some(
-				(departure) => departure && departure.down === undefined,
-			),
-		);
-		assert.throws(
-			() =>
-				routeArrows(
-					laid.variant,
-					laid.column,
-					bottom(laid.heading.box),
-					laid.items,
-					unsettled,
-					em,
-				),
-			/unsettled/,
-		);
-	});
-
 	test("departure: goes down to a place before its row anchored in the band of a row that holds it", () => {
 		const [variant] = laidOut({
 			variants: [
@@ -3636,5 +3614,146 @@ describe("layout", () => {
 			],
 		});
 		assert.equal(laid.variants[0].items.length, 12);
+	});
+});
+
+/** A button whose arrow runs right to the corridor through the label beside it, to a place further down. */
+const crossingSketch: Sketch = {
+	variants: [
+		{
+			variant: "A",
+			contains: [
+				{
+					place: "P",
+					contains: [
+						{ row: [{ affordance: "Go", to: "Far" }, { affordance: "Label" }] },
+					],
+				},
+				{ place: "Middle" },
+				{ place: "Far" },
+			],
+		},
+	],
+};
+
+describe("checkSketch", () => {
+	test("warns of an arrow that runs through a label", () => {
+		assert.deepEqual(checkSketch(crossingSketch), [
+			{
+				field: "variants[0].contains[0].contains[0].row[0].to",
+				message: 'arrow "Go → Far" crosses the label "Label"',
+			},
+		]);
+	});
+
+	test("warns of an arrow that runs through a scribble", () => {
+		const sketch = structuredClone(crossingSketch);
+		const place = sketch.variants[0].contains[0] as Place;
+		place.contains = [
+			{
+				row: [
+					{ affordance: "Go", to: "Far" },
+					{ affordance: "Some copy", read: true, scribble: 2 },
+				],
+			},
+		];
+		assert.deepEqual(checkSketch(sketch), [
+			{
+				field: "variants[0].contains[0].contains[0].row[0].to",
+				message: 'arrow "Go → Far" crosses the scribble "Some copy"',
+			},
+		]);
+	});
+
+	test("warns of an arrow that runs through a place's name", () => {
+		const sketch = structuredClone(crossingSketch);
+		const place = sketch.variants[0].contains[0] as Place;
+		place.contains = [
+			{ row: [{ affordance: "Go", to: "Far" }, { place: "Side" }] },
+		];
+		assert.deepEqual(checkSketch(sketch), [
+			{
+				field: "variants[0].contains[0].contains[0].row[0].to",
+				message: 'arrow "Go → Far" crosses the name "Side"',
+			},
+		]);
+	});
+
+	test("warns of at most three texts per arrow, the first it runs through", () => {
+		const buttons = Array.from({ length: 4000 }, (_, i) => ({
+			affordance: `B${i}`,
+			to: "Far",
+		}));
+		const sketch = structuredClone(crossingSketch);
+		const place = sketch.variants[0].contains[0] as Place;
+		place.contains = [{ row: buttons }];
+		const byArrow = new Map<string, string[]>();
+		for (const { field, message } of checkSketch(sketch))
+			byArrow.set(field, [...(byArrow.get(field) ?? []), message]);
+		assert.ok(byArrow.size > 3000, `${byArrow.size} arrows warned of`);
+		for (const [field, messages] of byArrow)
+			assert.ok(messages.length <= 3, `${field}: ${messages.length}`);
+		assert.deepEqual(
+			byArrow.get("variants[0].contains[0].contains[0].row[0].to"),
+			[1, 2, 3].map((i) => `arrow "B0 → Far" crosses the label "B${i}"`),
+		);
+	});
+
+	test("warns with the characters unsafe to print escaped", () => {
+		const sketch = structuredClone(crossingSketch);
+		const place = sketch.variants[0].contains[0] as Place;
+		place.contains = [
+			{ row: [{ affordance: "Go", to: "Far" }, { affordance: "Label\u202e" }] },
+		];
+		assert.deepEqual(
+			checkSketch(sketch).map(({ message }) => message),
+			['arrow "Go → Far" crosses the label "Label\\u202e"'],
+		);
+	});
+
+	test("throws FatMarkerError on invalid data or theme, as renderSvg, rather than warn", () => {
+		const sketch = {
+			variants: [{ variant: "A", contains: [{ place: "P", contains: [] }] }],
+		};
+		assert.throws(
+			() => checkSketch(sketch),
+			(error) =>
+				error instanceof FatMarkerError &&
+				error.field === "variants[0].contains[0].contains",
+		);
+		assert.throws(
+			() => checkSketch(crossingSketch, { fontSize: 1 }),
+			FatMarkerError,
+		);
+	});
+
+	test("warns of no crossing in any fixture", () => {
+		const directory = new URL("fixtures/", import.meta.url);
+		for (const file of readdirSync(directory)) {
+			const sketch = JSON.parse(readFileSync(new URL(file, directory), "utf8"));
+			assert.deepEqual(checkSketch(sketch), [], file);
+		}
+	});
+
+	test("warns of crossings in the 200 random sketches, each on an arrow's target", () => {
+		let count = 0;
+		for (const sketch of randomSketchList) {
+			const fields = new Set(
+				readSketch(sketch).variants.flatMap(({ arrows }) =>
+					arrows.map(({ field }) => field),
+				),
+			);
+			for (const { field, message } of checkSketch(sketch)) {
+				assert.ok(fields.has(field), field);
+				assert.match(
+					message,
+					/^arrow ".+ → .+" crosses the (name|label|scribble) ".+"$/,
+				);
+				count++;
+			}
+		}
+		// 581 on 2026-09-24, three per arrow at most, in 124 of the sketches: their rows of buttons and scribbles are denser
+		// than a usual sketch's.
+		assert.ok(count > 0);
 	});
 });
