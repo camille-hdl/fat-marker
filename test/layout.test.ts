@@ -3646,6 +3646,39 @@ describe("checkSketch", () => {
 		]);
 	});
 
+	test("warns of an arrow that runs through a scribble", () => {
+		const sketch = structuredClone(crossingSketch);
+		const place = sketch.variants[0].contains[0] as Place;
+		place.contains = [
+			{
+				row: [
+					{ affordance: "Go", to: "Far" },
+					{ affordance: "Some copy", read: true, scribble: 2 },
+				],
+			},
+		];
+		assert.deepEqual(checkSketch(sketch), [
+			{
+				field: "variants[0].contains[0].contains[0].row[0].to",
+				message: 'arrow "Go → Far" crosses the scribble "Some copy"',
+			},
+		]);
+	});
+
+	test("warns of an arrow that runs through a place's name", () => {
+		const sketch = structuredClone(crossingSketch);
+		const place = sketch.variants[0].contains[0] as Place;
+		place.contains = [
+			{ row: [{ affordance: "Go", to: "Far" }, { place: "Side" }] },
+		];
+		assert.deepEqual(checkSketch(sketch), [
+			{
+				field: "variants[0].contains[0].contains[0].row[0].to",
+				message: 'arrow "Go → Far" crosses the name "Side"',
+			},
+		]);
+	});
+
 	test("warns with the characters unsafe to print escaped", () => {
 		const sketch = structuredClone(crossingSketch);
 		const place = sketch.variants[0].contains[0] as Place;
