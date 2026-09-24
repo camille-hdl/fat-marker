@@ -326,36 +326,28 @@ function nameBottom({ name }: LaidPlace): number {
 }
 
 /**
- * The width each place of `variant` keeps right of its contents for the lanes of its stacked starts, STACK_LANE each,
- * read from the tree: known before placing, like the corridor's.
+ * The lanes of the stacked starts of `variant`, read from the tree: known before placing, like the corridor's. `lanes`,
+ * the width each place keeps right of its contents for them, STACK_LANE each; `from`, the places whose stacked starts
+ * reach a place of a row below, whose contents keep their natural width; `into`, the places they reach, each with the
+ * place they start from and the width of their lanes, which that place holds.
  */
 export function stackedLanes(
 	variant: ModelVariant,
 	em: number,
-): Map<ModelPlace, number> {
-	const widths = new Map<ModelPlace, number>();
-	for (const { stackedIn } of routesOf(variant)) {
-		if (!stackedIn) continue;
-		widths.set(stackedIn, (widths.get(stackedIn) ?? 0) + STACK_LANE * em);
-	}
-	return widths;
-}
-
-/**
- * The stacked starts of `variant` into a place of a row below, read from the tree: `from`, the places they start from,
- * whose contents keep their natural width; `into`, the places they reach, each with the place they start from and the
- * width of their lanes, which that place holds.
- */
-export function stackedIntoRows(
-	variant: ModelVariant,
-	em: number,
-): { from: Set<ModelPlace>; into: Map<ModelPlace, LanesInto> } {
-	const [from, into] = [
+): {
+	lanes: Map<ModelPlace, number>;
+	from: Set<ModelPlace>;
+	into: Map<ModelPlace, LanesInto>;
+} {
+	const [lanes, from, into] = [
+		new Map<ModelPlace, number>(),
 		new Set<ModelPlace>(),
 		new Map<ModelPlace, LanesInto>(),
 	];
 	for (const [i, { stackedIn, intoRow }] of routesOf(variant).entries()) {
-		if (!stackedIn || !intoRow) continue;
+		if (!stackedIn) continue;
+		lanes.set(stackedIn, (lanes.get(stackedIn) ?? 0) + STACK_LANE * em);
+		if (!intoRow) continue;
 		const { to } = variant.arrows[i];
 		from.add(stackedIn);
 		into.set(to, {
@@ -363,7 +355,7 @@ export function stackedIntoRows(
 			lanes: (into.get(to)?.lanes ?? 0) + STACK_LANE * em,
 		});
 	}
-	return { from, into };
+	return { lanes, from, into };
 }
 
 /**

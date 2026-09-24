@@ -4,7 +4,6 @@ import {
 	departuresOf,
 	lanesFrom,
 	routeArrows,
-	stackedIntoRows,
 	stackedLanes,
 } from "./arrows.ts";
 import { measure, type Weight, wrap } from "./font.ts";
@@ -222,8 +221,7 @@ export function layout(model: Model, theme: Theme): Layout {
 function placeVariant(variant: ModelVariant, em: number): LaidVariant {
 	const departures = departuresOf(variant, em);
 	const reserved = {
-		lanes: stackedLanes(variant, em),
-		intoRows: stackedIntoRows(variant, em),
+		stacked: stackedLanes(variant, em),
 		contentsRight: new Map<ModelPlace, number>(),
 		gaps: departures.gaps,
 		rows: departures.room,
@@ -329,8 +327,7 @@ function moveVariant(variant: LaidVariant, x: number): LaidVariant {
  * at its top, if they have any.
  */
 type Reserved = {
-	lanes: Map<ModelPlace, number>;
-	intoRows: ReturnType<typeof stackedIntoRows>;
+	stacked: ReturnType<typeof stackedLanes>;
 	contentsRight: Map<ModelPlace, number>;
 	gaps: Map<ModelContent, number>;
 	rows: (
@@ -374,16 +371,19 @@ function measurePlace(
 		measureContent(content, em, reserved),
 	);
 	const column = columnSize(contents, em);
-	const [lanes, padding] = [reserved.lanes.get(place) ?? 0, PLACE_PADDING * em];
+	const [lanes, padding] = [
+		reserved.stacked.lanes.get(place) ?? 0,
+		PLACE_PADDING * em,
+	];
 	const size = PLACE_NAME_SIZE * em;
 	const lines = wrap(place.name.text, nameWrap(column.width, em), 700, size);
 	const name = textBlock(lines, 700, size, "start", 0, 0, place.name.field);
 	const below = contents.length === 0 ? 0 : NAME_GAP * em + column.height;
-	const unstretched = reserved.intoRows.from.has(place);
+	const unstretched = reserved.stacked.from.has(place);
 	// a place whose stacked starts reach a row below is in a column, the one of that row: it starts at its left
 	if (unstretched) reserved.contentsRight.set(place, padding + column.width);
 	let width = Math.max(name.box.width, column.width + lanes) + 2 * padding;
-	const into = reserved.intoRows.into.get(place);
+	const into = reserved.stacked.into.get(place);
 	if (into) {
 		const contentsRight = reserved.contentsRight.get(into.from) as number;
 		const lanesLeft = lanesFrom(contentsRight, left, em);
