@@ -82,6 +82,8 @@ const fixtures = [
 	"arrows",
 	"sample",
 	"fan-in",
+	"departures-shared",
+	"departures-row",
 ];
 
 const sketches: Record<string, Sketch> = {
@@ -522,11 +524,31 @@ function arrivalOf(laidArrow: LaidArrow): Point {
 }
 
 /**
- * The `x` of a corridor arrow's lane: that of both inner control points of a single cubic, which the lane holds, or of
- * the end of its first turn, which enters the lane there, before its vertical run or its last turn.
+ * The cubic where an arrow turns into its lane: for a corridor arrow, the first with two neighbouring points on one
+ * vertical right of `column`, its lane, past its way out of a hemmed place, if any; the first for any other arrow, which
+ * turns into a lane of its place, or reaches its edge.
  */
-function laneOf({ path }: LaidArrow): number {
-	const onLane = path.length === 1 ? path[0].slice(1, 3) : path[0].slice(2);
+function turnIntoLane({ side, path }: LaidArrow, column: Box): number {
+	if (side !== "right") return 0;
+	const turn = path.findIndex(([, one, two, three]) =>
+		[
+			[one, two],
+			[two, three],
+		].some(([a, b]) => close(a.x, b.x) && a.x > right(column)),
+	);
+	assert.ok(turn >= 0, "no turn into a lane");
+	return turn;
+}
+
+/**
+ * The `x` of a corridor arrow's lane: that of both inner control points of its last cubic, when it turns into it there
+ * and the lane holds them, or of the end of its turn into it, before its vertical run or its last turn.
+ */
+function laneOf(laidArrow: LaidArrow, column: Box): number {
+	const { path } = laidArrow;
+	const turn = turnIntoLane(laidArrow, column);
+	const onLane =
+		turn === path.length - 1 ? path[turn].slice(1, 3) : path[turn].slice(2);
 	const [{ x }] = onLane;
 	assert.ok(
 		onLane.every((point) => close(point.x, x)),
@@ -628,10 +650,11 @@ function polyline(cubics: [Point, Point, Point, Point][]): Point[] {
 }
 
 /**
- * The part of an arrow from its lane to its arrival, as a polyline: all of it after its first turn, or its single cubic
- * from its rightmost point, where a corridor arrow reaches its lane (a direct arrow reaches its edge from there).
+ * The part of an arrow from its lane to its arrival, as a polyline: all of it after its turn into its lane, or its last
+ * cubic from its rightmost point, when it turns into its lane there (a direct arrow reaches its edge from there).
  */
-function approachOf({ path }: LaidArrow): Point[] {
+function approachOf(laidArrow: LaidArrow, column: Box): Point[] {
+	const path = laidArrow.path.slice(turnIntoLane(laidArrow, column));
 	const points = polyline(path.length > 1 ? path.slice(1) : path);
 	if (path.length > 1) return points;
 	const rightmost = points.reduce(
@@ -681,6 +704,32 @@ function rowBandsOf(variant: ModelVariant): Map<ModelPlace, ModelRow> {
 	};
 	visit(variant.contents, false);
 	return bands;
+}
+
+/**
+ * The affordances of `variant` in a hemmed place: a place, or a place or row it is in, is not the last content of a row
+ * (spec › Arrow routing).
+ */
+function inHemmedPlaces(variant: ModelVariant): Set<ModelAffordance> {
+	const affordances = new Set<ModelAffordance>();
+	const visit = (
+		contents: ModelContent[],
+		row: boolean,
+		within: boolean,
+		inPlace: boolean,
+	) => {
+		for (const [position, content] of contents.entries()) {
+			const hemmed = within || (row && position < contents.length - 1);
+			if (content.kind === "affordance") {
+				if (inPlace) affordances.add(content);
+				continue;
+			}
+			const place = content.kind === "place" && hemmed;
+			visit(content.contents, content.kind === "row", hemmed, inPlace || place);
+		}
+	};
+	visit(variant.contents, false, false, false);
+	return affordances;
 }
 
 /** A name for an arrow in a failure message. */
@@ -1174,7 +1223,9 @@ const invariants: [string, (sketch: Sketch, laid: Layout) => void][] = [
 		(_, laid) => {
 			for (const variant of laid.variants) {
 				const corridor = variant.arrows.filter(({ side }) => side === "right");
-				const lanes = corridor.map(laneOf);
+				const lanes = corridor.map((laidArrow) =>
+					laneOf(laidArrow, variant.column),
+				);
 				for (const [k, lane] of lanes.entries()) {
 					const what = arrowName(corridor[k]);
 					assert.ok(lane > right(variant.column) + GAP, what);
@@ -1274,9 +1325,13 @@ const invariants: [string, (sketch: Sketch, laid: Layout) => void][] = [
 						return laidArrow.side === "top" ? last.x : last.y;
 					});
 					const [highest, lowest] = [Math.min(...along), Math.max(...along)];
-					/** Whether an arrow starts between the highest and the lowest arrival of its side edge: it may be crossed. */
+					/**
+					 * Whether an arrow runs to its lane from between the highest and the lowest arrival of its side edge: it
+					 * may be crossed.
+					 */
 					const level = (laidArrow: LaidArrow) => {
-						const { y } = firstPoint(laidArrow);
+						const { path } = laidArrow;
+						const [{ y }] = path[turnIntoLane(laidArrow, variant.column)];
 						return (
 							laidArrow.side !== "top" &&
 							y >= highest - EPSILON &&
@@ -1289,7 +1344,13 @@ const invariants: [string, (sketch: Sketch, laid: Layout) => void][] = [
 							const what = `${arrowName(one)} and ${arrowName(other)}`;
 							assert.ok(Math.abs(along[i] - along[j]) > EPSILON, what);
 							if (level(one) || level(other)) continue;
-							assert.ok(!crosses(approachOf(one), approachOf(other)), what);
+							assert.ok(
+								!crosses(
+									approachOf(one, variant.column),
+									approachOf(other, variant.column),
+								),
+								what,
+							);
 						}
 					}
 				}
@@ -1311,8 +1372,40 @@ const invariants: [string, (sketch: Sketch, laid: Layout) => void][] = [
 							continue;
 						}
 						assert.ok(
-							!crosses(approachOf(one), approachOf(other)),
+							!crosses(
+								approachOf(one, variant.column),
+								approachOf(other, variant.column),
+							),
 							`${arrowName(one)} and ${arrowName(other)}`,
+						);
+					}
+				}
+			}
+		},
+	],
+	[
+		"runs each corridor arrow from a hemmed place, and only those, out of it before its lane, and never crosses two of them going down, or two going up, before their lanes, unless they start level (arrow invariant 6)",
+		(_, laid) => {
+			for (const variant of laid.variants) {
+				const hemmed = inHemmedPlaces(variant.variant);
+				const ways = variant.arrows.flatMap((laidArrow) => {
+					if (laidArrow.side !== "right") return [];
+					const turn = turnIntoLane(laidArrow, variant.column);
+					const what = arrowName(laidArrow);
+					assert.equal(turn > 0, hemmed.has(laidArrow.arrow.from), what);
+					if (turn === 0) return [];
+					const out = laidArrow.path.slice(0, turn);
+					const [start, end] = [out[0][0], out[out.length - 1][3]];
+					return [{ laidArrow, start, down: end.y > start.y, out }];
+				});
+				for (const [i, one] of ways.entries()) {
+					for (const other of ways.slice(i + 1)) {
+						if (one.down !== other.down || close(one.start.y, other.start.y)) {
+							continue;
+						}
+						assert.ok(
+							!crosses(polyline(one.out), polyline(other.out)),
+							`${arrowName(one.laidArrow)} and ${arrowName(other.laidArrow)}`,
 						);
 					}
 				}
@@ -2852,6 +2945,264 @@ describe("layout", () => {
 		}
 	});
 
+	/** A place right of `Left` in a row: its name and labels are level with the buttons of `Left`, the second on two lines. */
+	const besideLeft: Content = {
+		place: "Right",
+		contains: [
+			{ affordance: "Opening hours", read: true },
+			{
+				affordance: "Where the key is kept when the shed is closed",
+				read: true,
+			},
+			{ affordance: "Who to call", read: true },
+		],
+	};
+	/** A row whose hemmed place `Left` has a button to a place below the row, or above it (ticket 16). */
+	const leavingLeft: Record<string, Variant["contains"]> = {
+		down: [
+			{
+				row: [
+					{
+						place: "Left",
+						contains: [
+							{ affordance: "Open the shed" },
+							{ affordance: "Go to the tools", to: "Tools" },
+						],
+					},
+					besideLeft,
+				],
+			},
+			{ place: "Map" },
+			{ place: "Tools" },
+		],
+		up: [
+			{ place: "Home" },
+			{ place: "Map" },
+			{
+				row: [
+					{
+						place: "Left",
+						contains: [
+							{ affordance: "Open the shed" },
+							{ affordance: "Back home", to: "Home" },
+						],
+					},
+					besideLeft,
+				],
+			},
+		],
+	};
+
+	for (const [way, contains] of Object.entries(leavingLeft)) {
+		test(`departure ${way}: leaves a hemmed place across no name or label of the place on its right, to a place ${way === "down" ? "below" : "above"} the row`, () => {
+			const [variant] = laidOut({
+				variants: [{ variant: "A", contains }],
+			}).variants;
+			const beside = placeNamed(variant, "Right");
+			const affordances = affordancesOf(variant);
+			const boxes = [
+				beside.name.box,
+				...beside.place.contents.map((content) => {
+					const label =
+						content.kind === "affordance" && affordances.get(content)?.label;
+					assert.ok(label);
+					return label.box;
+				}),
+			];
+			for (const arrow of variant.arrows) {
+				for (const box of boxes) {
+					assert.ok(
+						polyline(arrow.path).every(
+							(point) => !inside(pointBox(point), box),
+						),
+						arrowName(arrow),
+					);
+				}
+			}
+		});
+	}
+
+	/**
+	 * Where a departure runs down or up the gap after its exit, and the height at which it then runs to its lane: the `x`
+	 * of its first vertical cubic, and the `y` of the first level one after it.
+	 */
+	const exitRunOf = ({ path }: LaidArrow): Point => {
+		const vertical = path.findIndex((cubic) =>
+			cubic.every((point) => close(point.x, cubic[0].x)),
+		);
+		const level = path
+			.slice(vertical + 1)
+			.find((cubic) => cubic.every((point) => close(point.y, cubic[0].y)));
+		assert.ok(vertical >= 0 && level, "no run down or up, then level");
+		return { x: path[vertical][0].x, y: level[0].y };
+	};
+
+	test("departure: gives each arrow out of a hemmed place its own lane in the gap after it, the climbs left, the highest start of the descents rightmost and highest in the band, above its arrivals (departures-shared)", () => {
+		const sketch = fixture("departures-shared");
+		const [variant] = laidOut(sketch).variants;
+		const [left, beside, home] = ["Left", "Right", "Home"].map((name) =>
+			placeNamed(variant, name),
+		);
+		const gap = beside.frame.x - right(left.frame);
+		assert.ok(close(gap, PLACE_GAP), String(gap));
+		const arrows = arrowsOf(variant);
+		const runs = new Map(
+			[
+				"Back home → Home",
+				"Open the shed → Shed",
+				"Go to the tools → Tools",
+			].map((name) => {
+				const arrow = arrows.get(name);
+				assert.ok(arrow, name);
+				return [name, exitRunOf(arrow)];
+			}),
+		);
+		for (const [k, run] of [...runs.values()].entries()) {
+			assert.ok(close(run.x, right(left.frame) + ((k + 1) * gap) / 4), `${k}`);
+		}
+		const lowest = bottom(left.frame) - LOW;
+		const into = arrows.get("Back to the list → Left");
+		assert.ok(into);
+		assert.ok(close(lastPoint(into).y, lowest));
+		assert.ok(
+			close(runs.get("Open the shed → Shed")?.y ?? 0, lowest - ARRIVAL_STEP),
+		);
+		assert.ok(
+			close(
+				runs.get("Go to the tools → Tools")?.y ?? 0,
+				lowest - 2 * ARRIVAL_STEP,
+			),
+		);
+		assert.ok(
+			close(
+				runs.get("Back home → Home")?.y ?? 0,
+				(bottom(home.frame) + left.frame.y) / 2,
+			),
+		);
+		// one arrival and two descents in the band: 2 em taller than with no arrows
+		const [row] = sketch.variants[0].contains.slice(1, 2);
+		const [bare] = laidOut({
+			variants: [
+				{ variant: "A", contains: withoutArrows([row]) as Variant["contains"] },
+			],
+		}).variants;
+		const tallest = placeNamed(bare, "Left").frame.height;
+		assert.ok(close(left.frame.height - tallest, 2 * em));
+	});
+
+	test("departure: makes a row 1 em taller above its places for each climb out of its hemmed places past the first, and runs them 1 em apart there, the leftmost lane highest (departures-row)", () => {
+		const sketch = fixture("departures-row");
+		const [variant] = laidOut(sketch).variants;
+		const [map, beds, paths, shed] = ["Map", "Beds", "Paths", "Shed"].map(
+			(name) => placeNamed(variant, name),
+		);
+		for (const place of [paths, shed]) {
+			assert.ok(close(place.frame.y, beds.frame.y), place.place.name.text);
+		}
+		const above = beds.frame.y - bottom(map.frame);
+		assert.ok(close(above, PLACE_GAP + 2 * em), String(above / em));
+		const climbs = [
+			"Back home → Home",
+			"See the map → Map",
+			"Back to the map → Map",
+		].map((name) => {
+			const arrow = arrowsOf(variant).get(name);
+			assert.ok(arrow, name);
+			return exitRunOf(arrow);
+		});
+		const byLane = climbs.toSorted((one, other) => one.x - other.x);
+		const middle = (bottom(map.frame) + beds.frame.y) / 2;
+		for (const [k, run] of byLane.entries()) {
+			assert.ok(close(run.y, middle + (k - 1) * ARRIVAL_STEP), String(k));
+		}
+		// two descents: 1 em taller at the bottom
+		const [row] = sketch.variants[0].contains.slice(2, 3);
+		const [bare] = laidOut({
+			variants: [
+				{ variant: "A", contains: withoutArrows([row]) as Variant["contains"] },
+			],
+		}).variants;
+		const tallest = placeNamed(bare, "Beds").frame.height;
+		assert.ok(close(beds.frame.height - tallest, em));
+	});
+
+	test("departure: widens the gap after a hemmed place by 0.5 em for each lane past the third", () => {
+		const gapFor = (count: number) => {
+			const [variant] = laidOut({
+				variants: [
+					{
+						variant: "A",
+						contains: [
+							{
+								row: [
+									{
+										place: "Left",
+										contains: Array.from({ length: count }, (_, i) => ({
+											affordance: `Go ${i}`,
+											to: "Tools",
+										})),
+									},
+									{ place: "Right" },
+								],
+							},
+							{ place: "Map" },
+							{ place: "Tools" },
+						],
+					},
+				],
+			}).variants;
+			const [left, beside] = ["Left", "Right"].map((name) =>
+				placeNamed(variant, name),
+			);
+			return beside.frame.x - right(left.frame);
+		};
+		assert.ok(close(gapFor(3), PLACE_GAP));
+		assert.ok(close(gapFor(4), PLACE_GAP + 0.5 * em));
+		assert.ok(close(gapFor(6), PLACE_GAP + 1.5 * em));
+	});
+
+	test("departure: goes down to a place of its row whose name is lower than its start, and up to one whose name is higher", () => {
+		const copy = (affordance: string) => ({ affordance, read: true });
+		const [variant] = laidOut({
+			variants: [
+				{
+					variant: "A",
+					contains: [
+						{
+							row: [
+								{
+									place: "Left",
+									contains: [
+										{ affordance: "Down to Low", to: "Low" },
+										copy("Opening hours"),
+										copy("Who to call"),
+										{ affordance: "Up to High", to: "High" },
+									],
+								},
+								{
+									place: "Right",
+									contains: [
+										{ place: "High" },
+										copy("Where the key is"),
+										copy("When it rains"),
+										{ place: "Low" },
+									],
+								},
+							],
+						},
+					],
+				},
+			],
+		}).variants;
+		const left = placeNamed(variant, "Left");
+		const arrows = arrowsOf(variant);
+		const down = arrows.get("Down to Low → Low");
+		const up = arrows.get("Up to High → High");
+		assert.ok(down && up);
+		assert.ok(exitRunOf(down).y > bottom(left.frame) - 2 * em);
+		assert.ok(exitRunOf(up).y < left.frame.y);
+	});
+
 	test("reserves 0.6 em of corridor right of the column for each corridor arrow", () => {
 		const rights = [1, 2, 3].map((count) => {
 			const [variant] = laidOut({
@@ -2901,12 +3252,15 @@ describe("layout", () => {
 					variant: "A",
 					contains: [
 						{
-							row: [
+							place: "Plot",
+							contains: [
 								{
-									place: "Plot",
-									contains: [{ affordance: "Store tools", to: "Shed" }],
+									row: [
+										{ affordance: "Store tools", to: "Shed" },
+										{ place: "Garden" },
+										{ place: "Shed" },
+									],
 								},
-								{ place: "Garden", contains: [{ place: "Shed" }] },
 							],
 						},
 					],
@@ -2919,8 +3273,9 @@ describe("layout", () => {
 	});
 
 	test("routes a corridor arrow whose ends are two turns apart in height, give or take rounding, with no run down its lane", () => {
-		// the wrapped names and labels put "Visit…" 2 em below the upper of the two arrivals into Shed, and the Gate above,
-		// with its link, shifts them to where floating-point sums leave a run of 6e-14 px
+		// the wrapped names and labels put "Visit…" 2 em below the lower of the two arrivals into Shed, the upper one that
+		// of "Store tools", which leaves Plot 12 above the row; and the Gate above, with its link, shifts them to where
+		// floating-point sums leave a run of 6e-14 px
 		const arrow = arrowsOf(
 			laidOut({
 				variants: [
@@ -2934,8 +3289,7 @@ describe("layout", () => {
 							{
 								row: [
 									{
-										place:
-											"Plot 12, sunny, next to the shed, with a very long name that runs on and on",
+										place: "Plot 12",
 										contains: [
 											{ place: "Shed" },
 											{
@@ -2948,14 +3302,9 @@ describe("layout", () => {
 									{
 										place: "Garden of the allotment society",
 										contains: [
+											{ affordance: "Rules", mark: "chevron" },
 											{
-												affordance:
-													"Rules voted at the general meeting of the society in the spring",
-												mark: "chevron",
-											},
-											{
-												affordance:
-													"Visit the shed and the plot next to it with the gardener on duty",
+												affordance: "Visit the shed with the gardener on duty",
 												to: "Shed",
 											},
 										],
@@ -2966,9 +3315,7 @@ describe("layout", () => {
 					},
 				],
 			}).variants[0],
-		).get(
-			"Visit the shed and the plot next to it with the gardener on duty → Shed",
-		);
+		).get("Visit the shed with the gardener on duty → Shed");
 		assert.ok(arrow);
 		assert.equal(arrow.side, "right");
 		const height = lastPoint(arrow).y - arrow.path[0][0].y;

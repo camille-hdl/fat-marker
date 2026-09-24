@@ -62,7 +62,7 @@ The vertical strip right of a variant's column where arrows run to a place that 
 _Avoid_: gutter, channel
 
 **Lane**:
-One arrow's track in a corridor, in data order, or down the right of a place's contents, for a stacked start.
+One arrow's track in a corridor, in data order, or down the right of a place's contents, for a stacked start, or down or up the gap of an exit.
 _Avoid_: track, slot
 
 **Stacked start**:
@@ -74,8 +74,12 @@ A place with something right of it in a row, or inside such a place; the arrows 
 _Avoid_: bordered, blocked
 
 **Band** (of a row):
-The strip at the bottom of a row where the arrows into the right edges of its hemmed places arrive, each at its own height, all of them in the order of their lanes, as on one edge; the row is taller by 1 em for each of them past the first.
+The strip at the bottom of a row where the arrows into the right edges of its hemmed places arrive, each at its own height, all of them in the order of their lanes, as on one edge, and where the arrows out of its hemmed places run to the corridor, above them; the row is taller by 1 em for each of them past the first.
 _Avoid_: strip, gutter
+
+**Exit** (of a hemmed place):
+The gap after the outermost hemmed place holding an affordance, in its row, down which the affordance's corridor arrows leave to the row's band, or up which they leave above the row, each in its own lane, so that they cross no name of the places on its right.
+_Avoid_: outlet, door
 
 **Name** (of a place):
 Short text that identifies a place, unique within its variant, drawn as the place's heading and used by arrows to point at it.

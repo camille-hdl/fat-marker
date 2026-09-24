@@ -1,0 +1,33 @@
+{
+	"variants": [
+		{
+			"variant": "A",
+			"contains": [
+				{ "place": "Home" },
+				{
+					"row": [
+						{
+							"place": "Left",
+							"contains": [
+								{ "affordance": "Back home", "to": "Home" },
+								{ "affordance": "Go to the tools", "to": "Tools" },
+								{ "affordance": "Open the shed", "to": "Shed" }
+							]
+						},
+						{
+							"place": "Right",
+							"contains": [
+								{ "affordance": "Opening hours", "read": true },
+								{ "affordance": "Where the key is", "read": true },
+								{ "affordance": "Back to the list", "to": "Left" }
+							]
+						}
+					]
+				},
+				{ "place": "Map" },
+				{ "place": "Tools" },
+				{ "place": "Shed" }
+			]
+		}
+	]
+}

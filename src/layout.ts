@@ -1,6 +1,6 @@
 // from @camille-hdl/hill-chart@0.2.0, 738a559
 // functions textBlock (+ anchor "middle", + field), boundingBox, grow, roundOutward, smallest and largest; placeHeading as sketchText (+ wrapping). The rest is new.
-import { routeArrows, rowBands, stackedLanes } from "./arrows.ts";
+import { departuresOf, routeArrows, stackedLanes } from "./arrows.ts";
 import { measure, type Weight, wrap } from "./font.ts";
 import type {
 	Mark,
@@ -142,11 +142,16 @@ type MeasuredPlace = Size & {
 	lanes: number;
 };
 type MeasuredAffordance = Size & { kind: "affordance"; laid: LaidAffordance };
-/** `holdsPlace`: one of its contents is a place, or a row that holds one. */
+/**
+ * `holdsPlace`: one of its contents is a place, or a row that holds one. `gaps`: between its contents, in order. `top`:
+ * the height it keeps above its contents for the arrows that climb out of its places.
+ */
 type MeasuredRow = Size & {
 	kind: "row";
 	contents: Measured[];
 	holdsPlace: boolean;
+	gaps: number[];
+	top: number;
 };
 
 /**
@@ -205,9 +210,11 @@ export function layout(model: Model, theme: Theme): Layout {
  * arrows, through a corridor on the right of the column or down the lanes of their places.
  */
 function placeVariant(variant: ModelVariant, em: number): LaidVariant {
+	const departures = departuresOf(variant, em);
 	const reserved = {
 		lanes: stackedLanes(variant, em),
-		bands: rowBands(variant, em),
+		gaps: departures.gaps,
+		rows: departures.room,
 	};
 	const contents = variant.contents.map((content) =>
 		measureContent(content, em, reserved),
@@ -216,7 +223,13 @@ function placeVariant(variant: ModelVariant, em: number): LaidVariant {
 	const items: LaidVariant["items"] = [];
 	placeColumn(contents, { x: 0, y: 0, width }, em, items);
 	const column = { x: 0, y: 0, width, height };
-	const { arrows, corridor } = routeArrows(variant, column, items, em);
+	const { arrows, corridor } = routeArrows(
+		variant,
+		column,
+		items,
+		departures,
+		em,
+	);
 	const size = VARIANT_NAME_SIZE * em;
 	const lines = wrap(
 		variant.name.text,
@@ -295,11 +308,17 @@ function moveVariant(variant: LaidVariant, x: number): LaidVariant {
 
 /**
  * The room the arrows take, read from the tree before placing: the width each place keeps right of its contents for the
- * lanes of its stacked starts, and the height each row keeps under its tallest content for its band, if they have any.
+ * lanes of its stacked starts, the width a content of a row keeps after it for the lanes out of the hemmed place it
+ * ends, and the height a row keeps above its contents and under them for the arrows out of its hemmed places and into
+ * them, given its contents laid out at its top, if they have any.
  */
 type Reserved = {
 	lanes: Map<ModelPlace, number>;
-	bands: Map<ModelRow, number>;
+	gaps: Map<ModelContent, number>;
+	rows: (
+		row: ModelRow,
+		laidOut: () => LaidVariant["items"],
+	) => { top: number; band: number };
 };
 
 function measureContent(
@@ -360,7 +379,10 @@ function nameWrap(
 	return Math.max(width / TEXT_ROOM, minimumEm * em);
 }
 
-/** A row: its contents side by side, apart, as tall as the tallest and its band under it. */
+/**
+ * A row: its contents side by side, apart, the gap after one wider by its reserved width, as tall as the tallest, the
+ * room above it for its climbs and its band under it.
+ */
 function measureRow(
 	row: ModelRow,
 	em: number,
@@ -369,15 +391,35 @@ function measureRow(
 	const contents = row.contents.map((content) =>
 		measureContent(content, em, reserved),
 	);
-	let width = gapsAlong(contents, em);
+	const gaps = contents
+		.slice(1)
+		.map(
+			(content, i) =>
+				gapBetween(contents[i], content, em) +
+				(reserved.gaps.get(row.contents[i]) ?? 0),
+		);
+	let width = gaps.reduce((sum, gap) => sum + gap, 0);
 	let height = 0;
 	for (const content of contents) {
 		width += content.width;
 		height = Math.max(height, content.height);
 	}
-	height += reserved.bands.get(row) ?? 0;
 	const holdsPlace = contents.some(isPlaceLike);
-	return { kind: "row", contents, width, height, holdsPlace };
+	const bare: MeasuredRow = {
+		kind: "row",
+		contents,
+		width,
+		height,
+		holdsPlace,
+		gaps,
+		top: 0,
+	};
+	const { top, band } = reserved.rows(row, () => {
+		const items: LaidVariant["items"] = [];
+		placeRow(bare, { x: 0, y: 0, width, height }, em, items);
+		return items;
+	});
+	return { ...bare, height: top + height + band, top };
 }
 
 /** The size of `contents` stacked in a column, apart: as wide as the widest. */
@@ -391,7 +433,7 @@ function columnSize(contents: Measured[], em: number): Size {
 	return { width, height };
 }
 
-/** The sum of the gaps between the neighbours of `contents`, in a column or in a row. */
+/** The sum of the gaps between the neighbours of `contents` in a column. */
 function gapsAlong(contents: Measured[], em: number): number {
 	let sum = 0;
 	for (let i = 1; i < contents.length; i++) {
@@ -438,8 +480,8 @@ function placeColumn(
 }
 
 /**
- * Sets `row`'s contents side by side from the top left of `at`, aligned top, each place stretched to the height of `at`:
- * the row's own, or that of the row it is in.
+ * Sets `row`'s contents side by side from the top left of `at`, below the room it keeps above them, aligned top, each
+ * place stretched down to the bottom of `at`: the row's own, or that of the row it is in.
  */
 function placeRow(
 	row: MeasuredRow,
@@ -449,10 +491,15 @@ function placeRow(
 ): void {
 	let left = at.x;
 	for (const [i, content] of row.contents.entries()) {
-		if (i > 0) left += gapBetween(row.contents[i - 1], content, em);
+		if (i > 0) left += row.gaps[i - 1];
 		placeContent(
 			content,
-			{ x: left, y: at.y, width: content.width, height: at.height },
+			{
+				x: left,
+				y: at.y + row.top,
+				width: content.width,
+				height: at.height - row.top,
+			},
 			em,
 			items,
 		);

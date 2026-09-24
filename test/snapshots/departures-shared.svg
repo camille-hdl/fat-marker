@@ -1,0 +1,92 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-18.0 -64.0 543.0 709.0" width="543.0" height="709.0" role="img">
+<title>Fat marker sketch</title>
+<desc>A
+- place: Home
+- place: Left
+- affordance: Back home
+- affordance: Go to the tools
+- affordance: Open the shed
+- place: Right
+- affordance: Opening hours (copy)
+- affordance: Where the key is (copy)
+- affordance: Back to the list
+- place: Map
+- place: Tools
+- place: Shed
+- arrow: Back home → Home
+- arrow: Go to the tools → Tools
+- arrow: Open the shed → Shed
+- arrow: Back to the list → Left</desc>
+<rect x="-18.0" y="-64.0" width="543.0" height="709.0" fill="#fff1e5"/>
+<g class="variant">
+<g class="place">
+  <path d="M-0.7,1.7 C14.4,1.6 59.5,0.9 90.1,1.1 C120.7,1.3 152.5,3.0 182.9,2.7 C213.2,2.4 242.6,-0.3 272.3,-0.9 C302.1,-1.6 331.2,-1.3 361.3,-1.2 C391.4,-1.0 437.6,0.0 452.9,0.2 M452.6,-3.0 C452.6,2.9 452.7,20.0 452.7,32.0 C452.6,44.0 452.5,63.0 452.4,69.2 M453.6,66.7 C438.0,66.4 390.6,65.1 360.2,65.2 C329.9,65.4 301.3,67.8 271.4,67.8 C241.5,67.9 211.3,65.6 180.9,65.6 C150.6,65.5 120.0,67.4 89.4,67.5 C58.8,67.5 12.6,66.2 -2.8,65.9 M0.1,67.2 C0.3,61.6 1.4,45.3 1.4,33.8 C1.5,22.2 0.6,3.9 0.4,-2.1" fill="none" stroke="#262a33" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round"/>
+</g>
+<g class="place">
+  <path d="M-1.6,94.0 C7.5,94.0 35.1,94.1 53.1,94.3 C71.1,94.4 88.2,95.1 106.3,94.6 C124.3,94.2 143.1,91.9 161.5,91.5 C179.8,91.1 207.4,92.0 216.6,92.2 M212.3,89.3 C212.0,98.0 210.9,124.8 210.6,141.9 C210.3,159.1 210.2,174.5 210.6,192.0 C211.1,209.5 213.2,229.7 213.2,246.9 C213.3,264.0 211.0,278.0 210.8,295.0 C210.6,312.1 211.8,340.1 212.0,349.1 M216.2,345.6 C207.2,346.0 180.2,347.4 162.3,347.7 C144.5,348.1 127.4,348.0 109.0,347.7 C90.7,347.4 70.7,345.9 52.3,346.1 C33.9,346.2 7.5,348.2 -1.5,348.6 M0.1,351.7 C-0.1,343.1 -1.4,317.4 -1.4,299.8 C-1.5,282.3 -0.3,263.7 -0.3,246.6 C-0.2,229.4 -0.9,214.3 -1.0,197.0 C-1.2,179.7 -1.2,160.4 -1.0,142.7 C-0.8,125.1 -0.1,99.8 0.1,91.2" fill="none" stroke="#262a33" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round"/>
+</g>
+<g class="affordance">
+  <path d="M21.8,161.5 C21.9,159.1 21.3,157.6 21.9,155.7 C22.7,153.6 24.9,150.5 26.7,149.5 C28.3,148.7 29.1,149.3 31.9,149.2 C44.9,148.8 130.5,145.7 142.4,148.4 C144.9,148.9 145.2,149.3 146.6,150.4 C148.3,151.6 150.7,154.0 151.6,155.9 C152.4,157.4 152.4,158.5 152.5,160.5 C152.7,164.0 152.4,171.8 151.7,174.9 C151.2,176.6 150.7,177.3 150.0,178.6 C149.3,179.9 148.9,181.5 147.6,182.5 C146.1,183.7 144.7,184.1 141.1,184.7 C126.7,187.1 42.6,185.0 30.7,184.5 C28.4,184.4 27.9,184.8 26.5,184.1 C24.7,183.2 22.2,180.0 21.5,178.2 C21.0,177.0 21.4,176.4 21.4,174.9 C21.4,171.9 21.7,165.0 21.8,161.5 Z" fill="none" stroke="#262a33" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+</g>
+<g class="affordance">
+  <path d="M19.3,214.0 C19.7,211.2 20.2,208.4 21.6,206.7 C23.0,205.2 25.4,204.6 27.2,203.9 C28.7,203.4 29.0,203.2 31.4,202.8 C45.8,201.0 167.1,199.6 181.7,202.2 C184.2,202.6 184.7,203.0 186.0,203.8 C187.4,204.7 188.7,205.9 189.5,207.3 C190.4,208.8 190.7,210.3 191.0,212.5 C191.4,216.2 191.4,223.9 190.5,227.4 C190.0,229.5 188.9,230.7 188.2,232.2 C187.5,233.5 187.2,234.8 186.2,235.9 C185.0,237.2 184.3,238.2 181.4,239.0 C166.3,243.3 42.6,237.5 30.4,236.2 C28.7,236.0 28.5,236.0 27.5,235.6 C26.2,234.9 24.7,233.5 23.4,232.2 C22.1,230.8 20.6,229.4 19.8,227.1 C18.7,223.9 18.8,217.7 19.3,214.0 Z" fill="none" stroke="#262a33" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+</g>
+<g class="affordance">
+  <path d="M21.0,267.5 C21.3,265.3 21.1,263.7 21.9,262.0 C22.7,260.0 24.4,257.4 26.0,256.6 C27.4,256.0 28.0,256.7 30.6,256.7 C45.2,256.9 160.9,252.0 177.2,254.6 C180.6,255.1 181.4,255.7 183.2,256.6 C184.8,257.4 186.6,258.2 187.5,259.6 C188.6,261.1 188.7,263.0 188.8,265.5 C189.1,269.3 188.4,277.0 187.7,280.5 C187.4,282.4 187.2,283.6 186.3,284.9 C185.3,286.4 183.2,287.7 181.5,288.7 C179.9,289.8 179.4,290.6 176.3,291.3 C161.1,294.8 50.3,288.9 32.4,289.6 C28.3,289.7 26.3,291.2 24.8,290.2 C23.6,289.5 23.9,287.5 23.2,286.1 C22.3,284.4 20.5,283.2 20.0,281.0 C19.2,277.6 20.6,271.0 21.0,267.5 Z" fill="none" stroke="#262a33" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+</g>
+<g class="place">
+  <path d="M235.0,91.5 C244.0,91.7 270.3,92.0 288.6,92.5 C306.8,93.0 326.2,94.0 344.4,94.4 C362.6,94.8 379.7,94.9 397.8,94.9 C415.9,95.0 444.0,94.7 453.2,94.6 M451.9,93.1 C451.9,101.6 452.2,127.4 452.1,144.5 C452.0,161.5 451.3,178.5 451.6,195.6 C451.9,212.6 453.9,229.7 453.8,246.9 C453.7,264.0 451.3,281.4 450.9,298.4 C450.6,315.4 451.7,340.5 451.9,348.9 M453.8,348.0 C445.0,348.1 419.1,349.1 400.9,348.9 C382.6,348.7 362.6,347.1 344.4,346.8 C326.3,346.4 310.0,346.6 292.0,346.6 C274.0,346.5 245.7,346.5 236.4,346.5 M237.2,350.4 C237.3,342.0 238.1,317.1 238.0,299.6 C237.8,282.2 236.2,263.5 236.2,245.9 C236.3,228.4 237.8,212.1 238.3,194.5 C238.7,176.8 238.7,157.8 238.9,140.1 C239.1,122.4 239.4,96.8 239.5,88.1" fill="none" stroke="#262a33" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round"/>
+</g>
+<g class="affordance">
+  <path d="M259.9,241.8 C260.2,239.8 260.5,238.7 261.1,237.1 C261.7,235.4 262.1,233.0 263.5,231.8 C264.9,230.7 266.1,230.7 269.5,230.2 C286.4,228.0 408.8,225.4 422.2,230.0 C424.6,230.8 424.7,231.9 425.8,232.8 C426.9,233.8 427.9,234.5 428.9,235.7 C430.2,237.1 432.1,238.7 432.7,241.0 C433.5,244.2 431.2,250.1 430.8,253.9 C430.5,256.7 431.6,259.7 430.5,261.3 C429.6,262.7 427.2,262.8 425.5,263.6 C423.7,264.6 423.3,265.9 420.0,266.8 C404.1,271.0 287.8,269.2 270.5,266.4 C266.7,265.8 265.6,265.1 263.7,264.2 C262.3,263.4 260.9,262.8 260.0,261.5 C258.9,259.8 258.4,257.3 258.2,254.6 C258.0,251.0 259.2,245.0 259.9,241.8 Z" fill="none" stroke="#262a33" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+</g>
+<g class="place">
+  <path d="M-2.1,376.0 C13.1,376.2 59.1,377.4 89.4,377.2 C119.6,377.0 148.8,375.0 179.4,374.7 C210.0,374.4 242.8,375.5 273.0,375.5 C303.1,375.5 330.3,374.8 360.3,374.9 C390.3,375.0 437.7,375.8 453.2,375.9 M452.3,374.4 C452.1,380.5 451.1,399.1 451.4,410.7 C451.6,422.3 453.4,438.4 453.8,443.9 M457.5,441.6 C442.4,441.8 398.3,443.1 367.2,442.8 C336.1,442.5 302.4,439.9 270.9,439.8 C239.5,439.6 209.0,441.9 178.7,441.9 C148.3,442.0 119.4,440.1 88.9,440.0 C58.5,439.9 11.7,440.9 -3.8,441.1 M-1.5,443.6 C-1.1,437.6 0.5,419.6 0.9,407.7 C1.3,395.9 0.8,378.3 0.8,372.4" fill="none" stroke="#262a33" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round"/>
+</g>
+<g class="place">
+  <path d="M-3.2,469.3 C11.8,469.2 56.0,469.0 86.8,468.8 C117.7,468.6 150.8,468.5 181.7,468.2 C212.7,467.9 242.1,466.7 272.5,466.7 C303.0,466.8 334.2,468.4 364.6,468.5 C395.0,468.7 440.0,467.6 455.1,467.5 M452.9,466.3 C452.5,472.3 450.4,490.4 450.1,502.2 C449.8,514.1 451.0,531.5 451.1,537.4 M453.3,533.9 C438.4,533.6 394.2,532.2 363.7,532.0 C333.3,531.9 301.1,532.6 270.6,533.1 C240.1,533.6 210.9,535.3 180.5,535.0 C150.2,534.8 119.0,531.9 88.7,531.6 C58.5,531.3 13.9,533.1 -1.0,533.4 M-0.9,535.2 C-0.6,529.3 0.7,511.0 0.9,499.8 C1.0,488.7 0.1,473.5 -0.1,468.3" fill="none" stroke="#262a33" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round"/>
+</g>
+<g class="place">
+  <path d="M-2.8,562.1 C12.6,562.2 59.1,563.1 89.8,562.7 C120.4,562.2 151.1,559.9 181.2,559.3 C211.3,558.8 239.9,558.7 270.3,559.2 C300.7,559.6 332.6,561.8 363.3,562.0 C394.0,562.1 439.3,560.5 454.5,560.2 M452.0,555.8 C452.0,562.2 452.1,581.9 452.2,594.1 C452.4,606.4 452.6,623.5 452.7,629.3 M454.4,626.3 C439.3,626.4 394.4,626.2 364.3,626.5 C334.3,626.8 304.1,627.9 274.0,628.1 C243.9,628.2 214.1,627.2 183.7,627.5 C153.2,627.8 121.9,629.7 91.4,629.8 C60.8,629.9 15.6,628.4 0.4,628.1 M1.7,632.0 C1.8,625.6 2.5,605.7 1.9,593.6 C1.3,581.5 -1.2,565.1 -1.9,559.4" fill="none" stroke="#262a33" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round"/>
+</g>
+</g>
+<g class="halo">
+  <path d="M151.9,167.0 C166.5,165.6 184.9,167.6 205.0,167.0 C211.7,167.3 218.8,161.3 218.5,153.5 C220.2,132.3 219.7,112.0 218.5,93.2 C218.2,84.4 221.3,78.3 232.0,79.7 C301.9,82.1 380.3,79.4 450.6,79.7 C458.6,81.7 465.3,74.3 468.6,61.7 C467.5,61.6 465.1,55.0 468.6,51.1 C467.0,46.0 464.0,41.8 459.6,38.7" fill="none" stroke="#fff1e5" stroke-width="9.0" stroke-linecap="round" stroke-linejoin="round"/>
+</g>
+<g class="halo">
+  <path d="M191.0,220.1 C199.8,221.5 209.0,219.1 218.5,220.1 C224.5,218.2 231.6,225.5 232.0,233.6 C230.0,250.7 234.2,272.4 232.0,289.8 C234.0,298.9 240.3,301.1 245.5,303.3 C318.6,304.7 388.0,304.8 461.4,303.3 C473.4,305.4 476.1,310.0 479.4,321.3 C481.1,377.4 482.2,425.7 479.4,482.6 C481.5,490.2 472.6,495.6 459.6,498.5" fill="none" stroke="#fff1e5" stroke-width="9.0" stroke-linecap="round" stroke-linejoin="round"/>
+</g>
+<g class="halo">
+  <path d="M187.7,273.2 C193.4,271.8 200.6,275.8 211.7,273.2 C219.4,275.0 221.7,282.7 225.2,286.7 C224.2,290.2 226.0,303.9 225.2,307.8 C226.9,313.4 232.7,323.0 238.7,321.3 C314.7,323.7 392.2,319.2 472.2,321.3 C484.7,318.1 490.5,329.7 490.2,339.3 C490.7,415.3 489.0,495.0 490.2,575.8 C491.9,582.9 478.4,589.3 459.6,592.2" fill="none" stroke="#fff1e5" stroke-width="9.0" stroke-linecap="round" stroke-linejoin="round"/>
+</g>
+<g class="halo">
+  <path d="M431.7,248.0 C472.7,248.8 502.8,255.5 501.0,266.0 C502.9,283.5 502.2,304.6 501.0,321.3 C504.3,332.0 495.0,337.3 483.0,339.3 C395.0,338.1 307.0,339.1 218.9,339.3" fill="none" stroke="#fff1e5" stroke-width="9.0" stroke-linecap="round" stroke-linejoin="round"/>
+</g>
+<g class="text">
+<text text-anchor="start" font-family="'Atkinson Hyperlegible Next', Avenir, 'Segoe UI', Seravek, Ubuntu, Calibri, 'DejaVu Sans', sans-serif" font-size="25.2" font-weight="700" fill="#262a33"><tspan x="0.0" y="-21.3">A</tspan></text>
+<text text-anchor="start" font-family="'Atkinson Hyperlegible Next', Avenir, 'Segoe UI', Seravek, Ubuntu, Calibri, 'DejaVu Sans', sans-serif" font-size="19.8" font-weight="700" fill="#262a33"><tspan x="20.7" y="40.0">Home</tspan></text>
+<text text-anchor="start" font-family="'Atkinson Hyperlegible Next', Avenir, 'Segoe UI', Seravek, Ubuntu, Calibri, 'DejaVu Sans', sans-serif" font-size="19.8" font-weight="700" fill="#262a33"><tspan x="20.7" y="133.2">Left</tspan></text>
+<text text-anchor="middle" font-family="'Atkinson Hyperlegible Next', Avenir, 'Segoe UI', Seravek, Ubuntu, Calibri, 'DejaVu Sans', sans-serif" font-size="18.0" font-weight="600" fill="#262a33"><tspan x="86.3" y="173.3">Back home</tspan></text>
+<text text-anchor="middle" font-family="'Atkinson Hyperlegible Next', Avenir, 'Segoe UI', Seravek, Ubuntu, Calibri, 'DejaVu Sans', sans-serif" font-size="18.0" font-weight="600" fill="#262a33"><tspan x="105.9" y="226.4">Go to the tools</tspan></text>
+<text text-anchor="middle" font-family="'Atkinson Hyperlegible Next', Avenir, 'Segoe UI', Seravek, Ubuntu, Calibri, 'DejaVu Sans', sans-serif" font-size="18.0" font-weight="600" fill="#262a33"><tspan x="104.2" y="279.5">Open the shed</tspan></text>
+<text text-anchor="start" font-family="'Atkinson Hyperlegible Next', Avenir, 'Segoe UI', Seravek, Ubuntu, Calibri, 'DejaVu Sans', sans-serif" font-size="19.8" font-weight="700" fill="#262a33"><tspan x="259.4" y="133.2">Right</tspan></text>
+<text text-anchor="start" font-family="'Atkinson Hyperlegible Next', Avenir, 'Segoe UI', Seravek, Ubuntu, Calibri, 'DejaVu Sans', sans-serif" font-size="18.0" font-weight="600" fill="#262a33"><tspan x="259.4" y="167.0">Opening hours</tspan></text>
+<text text-anchor="start" font-family="'Atkinson Hyperlegible Next', Avenir, 'Segoe UI', Seravek, Ubuntu, Calibri, 'DejaVu Sans', sans-serif" font-size="18.0" font-weight="600" fill="#262a33"><tspan x="259.4" y="207.5">Where the key is</tspan></text>
+<text text-anchor="middle" font-family="'Atkinson Hyperlegible Next', Avenir, 'Segoe UI', Seravek, Ubuntu, Calibri, 'DejaVu Sans', sans-serif" font-size="18.0" font-weight="600" fill="#262a33"><tspan x="345.6" y="254.3">Back to the list</tspan></text>
+<text text-anchor="start" font-family="'Atkinson Hyperlegible Next', Avenir, 'Segoe UI', Seravek, Ubuntu, Calibri, 'DejaVu Sans', sans-serif" font-size="19.8" font-weight="700" fill="#262a33"><tspan x="20.7" y="414.4">Map</tspan></text>
+<text text-anchor="start" font-family="'Atkinson Hyperlegible Next', Avenir, 'Segoe UI', Seravek, Ubuntu, Calibri, 'DejaVu Sans', sans-serif" font-size="19.8" font-weight="700" fill="#262a33"><tspan x="20.7" y="507.6">Tools</tspan></text>
+<text text-anchor="start" font-family="'Atkinson Hyperlegible Next', Avenir, 'Segoe UI', Seravek, Ubuntu, Calibri, 'DejaVu Sans', sans-serif" font-size="19.8" font-weight="700" fill="#262a33"><tspan x="20.7" y="600.7">Shed</tspan></text>
+</g>
+<g class="arrow">
+  <path d="M151.9,167.0 C166.5,165.6 184.9,167.6 205.0,167.0 C211.7,167.3 218.8,161.3 218.5,153.5 C220.2,132.3 219.7,112.0 218.5,93.2 C218.2,84.4 221.3,78.3 232.0,79.7 C301.9,82.1 380.3,79.4 450.6,79.7 C458.6,81.7 465.3,74.3 468.6,61.7 C467.5,61.6 465.1,55.0 468.6,51.1 C465.2,40.0 454.9,33.1 438.0,33.1 M449.5,41.7 L438.0,33.1 L451.7,28.6" fill="none" stroke="#0f5499" stroke-width="2.9" stroke-linecap="round" stroke-linejoin="round"/>
+</g>
+<g class="arrow">
+  <path d="M191.0,220.1 C199.8,221.5 209.0,219.1 218.5,220.1 C224.5,218.2 231.6,225.5 232.0,233.6 C230.0,250.7 234.2,272.4 232.0,289.8 C234.0,298.9 240.3,301.1 245.5,303.3 C318.6,304.7 388.0,304.8 461.4,303.3 C473.4,305.4 476.1,310.0 479.4,321.3 C481.1,377.4 482.2,425.7 479.4,482.6 C482.6,493.9 460.9,500.6 438.0,500.6 M451.0,506.8 L438.0,500.6 L449.8,492.4" fill="none" stroke="#0f5499" stroke-width="2.9" stroke-linecap="round" stroke-linejoin="round"/>
+</g>
+<g class="arrow">
+  <path d="M187.7,273.2 C193.4,271.8 200.6,275.8 211.7,273.2 C219.4,275.0 221.7,282.7 225.2,286.7 C224.2,290.2 226.0,303.9 225.2,307.8 C226.9,313.4 232.7,323.0 238.7,321.3 C314.7,323.7 392.2,319.2 472.2,321.3 C484.7,318.1 490.5,329.7 490.2,339.3 C490.7,415.3 489.0,495.0 490.2,575.8 C492.5,585.4 466.8,593.8 438.0,593.8 M450.8,600.3 L438.0,593.8 L450.6,586.8" fill="none" stroke="#0f5499" stroke-width="2.9" stroke-linecap="round" stroke-linejoin="round"/>
+</g>
+<g class="arrow">
+  <path d="M431.7,248.0 C472.7,248.8 502.8,255.5 501.0,266.0 C502.9,283.5 502.2,304.6 501.0,321.3 C504.3,332.0 495.0,337.3 483.0,339.3 C387.8,338.0 292.6,339.3 197.3,339.3 M210.2,345.8 L197.3,339.3 L210.2,332.8" fill="none" stroke="#0f5499" stroke-width="2.9" stroke-linecap="round" stroke-linejoin="round"/>
+</g>
+</svg>
