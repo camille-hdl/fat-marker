@@ -38,8 +38,8 @@
 		"build-font": "node scripts/build-font.ts"
 	},
 	"devDependencies": {
-		"@biomejs/biome": "^2.5.14",
-		"@types/node": "^22.20.4",
+		"@biomejs/biome": "^2.5.15",
+		"@types/node": "^22.20.5",
 		"typescript": "^7.0.2"
 	},
 	"dependencies": {
